@@ -136,7 +136,7 @@ type QuickRange = "1M" | "3M" | "6M" | "1A" | "ALL"
 export const BalanceChart = (props: { series: BalancePoint[] }) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [width, setWidth] = useState(700)
-  const height = 320
+  const height = useMemo(() => Math.max(280, Math.min(400, width * 0.45)), [width])
   const svgRef = useRef<SVGSVGElement | null>(null)
   const pointerIdRef = useRef<number | null>(null)
   const [labelFont, setLabelFont] = useState("12px sans-serif")
@@ -474,6 +474,12 @@ export const BalanceChart = (props: { series: BalancePoint[] }) => {
       }
       const firstIndex = Math.min(selectionStartIndex, selectionEndIndex)
       const lastIndex = Math.max(selectionStartIndex, selectionEndIndex)
+      if (firstIndex === lastIndex) {
+        setIsSelecting(false)
+        setSelectionStartIndex(null)
+        setSelectionEndIndex(null)
+        return
+      }
       const firstDate = filteredSeries[firstIndex].date
       const lastDate = filteredSeries[lastIndex].date
       setStartDate(firstDate)
@@ -669,7 +675,8 @@ export const BalanceChart = (props: { series: BalancePoint[] }) => {
           ref={svgRef}
           viewBox={`0 0 ${width} ${height}`}
           preserveAspectRatio="xMidYMid meet"
-          className="h-80 w-full text-primary"
+          className="w-full text-primary"
+          style={{ aspectRatio: `${width} / ${height}`, minHeight: '280px', maxHeight: '400px' }}
           aria-label="Evolução do saldo"
           role="img"
           onPointerMove={handlePointerMove}

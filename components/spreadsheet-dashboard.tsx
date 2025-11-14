@@ -10,18 +10,21 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select } from "@/components/ui/select"
 import { cn } from "@/components/ui/utils"
 import {
   ChevronDown,
   ChevronUp,
   ChevronsUpDown,
   FilterX,
+  Image as ImageIcon,
   Loader2,
   Pencil,
   Plus,
   Save,
   Search,
   Trash2,
+  Upload,
   X
 } from "lucide-react"
 
@@ -49,6 +52,15 @@ type FormState = {
   date: string
   amount: string
   amount_owed: string
+}
+
+type ExtractedTransaction = {
+  description: string
+  date: string
+  amount: number
+  amount_owed: number
+  paid_by: string
+  category: string
 }
 
 const initialFormState = (): FormState => {
@@ -88,6 +100,13 @@ export const SpreadsheetDashboard = () => {
   const [createForm, setCreateForm] = useState<FormState>(initialFormState)
   const [createPending, setCreatePending] = useState(false)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
+  const [uploadedImage, setUploadedImage] = useState<string | null>(null)
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [extractedTransactions, setExtractedTransactions] = useState<ExtractedTransaction[]>([])
+  const [savePending, setSavePending] = useState(false)
+  const [addMenuOpen, setAddMenuOpen] = useState(false)
   const [editRowId, setEditRowId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<FormState>(initialFormState)
   const [editPending, setEditPending] = useState(false)
@@ -137,6 +156,45 @@ export const SpreadsheetDashboard = () => {
       document.body.style.overflow = previousOverflow
     }
   }, [createDialogOpen])
+
+  useEffect(() => {
+    if (!uploadDialogOpen) {
+      return
+    }
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+
+    const handlePaste = async (event: ClipboardEvent) => {
+      const items = event.clipboardData?.items
+      if (!items) {
+        return
+      }
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i]
+        if (item.type.startsWith("image/")) {
+          event.preventDefault()
+          const file = item.getAsFile()
+          if (file) {
+            setUploadedFile(file)
+            const reader = new FileReader()
+            reader.onload = e => {
+              setUploadedImage(e.target?.result as string)
+            }
+            reader.readAsDataURL(file)
+            setExtractedTransactions([])
+            setError(null)
+          }
+          break
+        }
+      }
+    }
+
+    window.addEventListener("paste", handlePaste)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener("paste", handlePaste)
+    }
+  }, [uploadDialogOpen])
 
   const filteredTransactions = useMemo(() => {
     const searchValue = search.trim().toLowerCase()
@@ -190,22 +248,27 @@ export const SpreadsheetDashboard = () => {
   }, [search, startDate, endDate])
 
   const createAmountValue = useMemo(() => normalizeNumber(createForm.amount), [createForm.amount])
-  const createAmountOwedValue = useMemo(() => normalizeNumber(createForm.amount_owed), [createForm.amount_owed])
+  const createAmountOwedValue = useMemo(() => {
+    if (createForm.amount.trim() && createForm.paid_by) {
+      const amount = normalizeNumber(createForm.amount)
+      if (amount !== null) {
+        return createForm.paid_by === "Júlia" ? -amount / 2 : amount / 2
+      }
+    }
+    return normalizeNumber(createForm.amount_owed)
+  }, [createForm.amount, createForm.paid_by, createForm.amount_owed])
   const createAmountInvalid = createForm.amount.trim().length > 0 && createAmountValue === null
-  const createAmountOwedInvalid =
-    createForm.amount_owed.trim().length > 0 && createAmountOwedValue === null
+  const createAmountOwedInvalid = false
 
   const isCreateFormValid = useMemo(() => {
     const descriptionValid = createForm.description.trim().length > 0
-    const paidByValid = createForm.paid_by.trim().length > 0
+    const paidByValid = createForm.paid_by === "Antônio" || createForm.paid_by === "Júlia"
     const dateValid = createForm.date.length > 0
-    const amountValid = !createAmountInvalid
-    const amountOwedProvided = createForm.amount_owed.trim().length > 0
-    return descriptionValid && paidByValid && dateValid && amountValid && amountOwedProvided && !createAmountOwedInvalid
+    const amountValid = !createAmountInvalid && createAmountValue !== null
+    return descriptionValid && paidByValid && dateValid && amountValid
   }, [
     createAmountInvalid,
-    createAmountOwedInvalid,
-    createForm.amount_owed,
+    createAmountValue,
     createForm.date,
     createForm.description,
     createForm.paid_by
@@ -427,7 +490,28 @@ export const SpreadsheetDashboard = () => {
 
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = event.target
-    setCreateForm(previous => ({ ...previous, [name]: value }))
+    setCreateForm(previous => {
+      const updated = { ...previous, [name]: value }
+      if (name === "amount" || name === "paid_by") {
+        const amount = normalizeNumber(updated.amount)
+        if (amount !== null && (updated.paid_by === "Antônio" || updated.paid_by === "Júlia")) {
+          updated.amount_owed = String(updated.paid_by === "Júlia" ? -amount / 2 : amount / 2)
+        }
+      }
+      return updated
+    })
+  }
+
+  const handlePaidByChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = event.target.value
+    setCreateForm(previous => {
+      const updated = { ...previous, paid_by: value }
+      const amount = normalizeNumber(updated.amount)
+      if (amount !== null && (value === "Antônio" || value === "Júlia")) {
+        updated.amount_owed = String(value === "Júlia" ? -amount / 2 : amount / 2)
+      }
+      return updated
+    })
   }
 
   const handleEditInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -451,6 +535,147 @@ export const SpreadsheetDashboard = () => {
       setEditForm(initialFormState())
     }
     setDeletePendingId(null)
+  }
+
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) {
+      return
+    }
+    if (!file.type.startsWith("image/")) {
+      setError("Por favor, selecione um arquivo de imagem")
+      return
+    }
+    setUploadedFile(file)
+    const reader = new FileReader()
+    reader.onload = e => {
+      setUploadedImage(e.target?.result as string)
+    }
+    reader.readAsDataURL(file)
+    setExtractedTransactions([])
+    setError(null)
+  }
+
+  const handleAnalyzeImage = async () => {
+    if (!uploadedFile) {
+      return
+    }
+    setAnalyzing(true)
+    setError(null)
+    try {
+      const formData = new FormData()
+      formData.append("image", uploadedFile)
+      const response = await fetch("/api/analyze-image", {
+        method: "POST",
+        body: formData
+      })
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Erro ao analisar imagem")
+      }
+      const data = await response.json()
+      const transactions: ExtractedTransaction[] = data.transactions.map((t: any) => ({
+        description: t.description,
+        date: t.date,
+        amount: t.amount,
+        amount_owed: 0,
+        paid_by: "",
+        category: ""
+      }))
+      setExtractedTransactions(transactions)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao analisar imagem")
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  const handleUpdateExtractedTransaction = (index: number, field: keyof ExtractedTransaction, value: string | number) => {
+    setExtractedTransactions(previous =>
+      previous.map((t, i) => {
+        if (i === index) {
+          const updated = { ...t, [field]: value }
+          if (field === "amount" || field === "paid_by") {
+            const amount = field === "amount" ? (value as number) : updated.amount
+            const paidBy = field === "paid_by" ? (value as string) : updated.paid_by
+            if (paidBy === "Júlia") {
+              updated.amount_owed = -amount / 2
+            } else if (paidBy === "Antônio") {
+              updated.amount_owed = amount / 2
+            } else {
+              updated.amount_owed = amount / 2
+            }
+          }
+          return updated
+        }
+        return t
+      })
+    )
+  }
+
+  const handleSaveExtractedTransactions = async () => {
+    const invalidTransactions = extractedTransactions.filter(
+      t => !t.description.trim() || (t.paid_by !== "Antônio" && t.paid_by !== "Júlia") || !t.date
+    )
+    if (invalidTransactions.length > 0) {
+      setError("Preencha todos os campos obrigatórios (descrição, data e pago por) em todas as transações")
+      return
+    }
+    setSavePending(true)
+    setError(null)
+    try {
+      const payloads: TransactionInsert[] = extractedTransactions.map(t => ({
+        description: t.description.trim(),
+        category: t.category.trim() || null,
+        paid_by: t.paid_by.trim(),
+        date: t.date,
+        amount: t.amount,
+        amount_owed: t.amount_owed
+      }))
+      const { data, error: insertError } = await supabase
+        .from("shared_transactions")
+        .insert(payloads)
+        .select("*")
+      if (insertError) {
+        setError(insertError.message)
+      } else if (data) {
+        setTransactions(previous => [...data, ...previous])
+        handleCloseUploadDialog()
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao salvar transações")
+    } finally {
+      setSavePending(false)
+    }
+  }
+
+  const handleOpenUploadDialog = () => {
+    setUploadDialogOpen(true)
+    setUploadedImage(null)
+    setUploadedFile(null)
+    setExtractedTransactions([])
+    setError(null)
+  }
+
+  const handleCloseUploadDialog = () => {
+    if (analyzing || savePending) {
+      return
+    }
+    setUploadDialogOpen(false)
+    setUploadedImage(null)
+    setUploadedFile(null)
+    setExtractedTransactions([])
+    setError(null)
+    requestAnimationFrame(() => {
+      createButtonRef.current?.focus()
+    })
+  }
+
+  const handleUploadDialogKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape" && !analyzing && !savePending) {
+      event.stopPropagation()
+      handleCloseUploadDialog()
+    }
   }
 
   const renderSortIcon = (field: SortField) => {
@@ -527,24 +752,6 @@ export const SpreadsheetDashboard = () => {
         <BalanceChart series={chartSeries} />
       </section>
 
-      <section className="rounded-lg border border-border bg-card p-6 shadow-sm">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-lg font-semibold">Transações</p>
-            <p className="text-sm text-muted-foreground">Cadastre uma nova movimentação financeira.</p>
-          </div>
-          <Button
-            ref={createButtonRef}
-            type="button"
-            onClick={handleOpenCreateDialog}
-            aria-haspopup="dialog"
-            aria-expanded={createDialogOpen}
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Adicionar transação
-          </Button>
-        </div>
-      </section>
       {createDialogOpen && (
         <div className="fixed inset-0 z-50">
           <div
@@ -603,14 +810,17 @@ export const SpreadsheetDashboard = () => {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="paid_by">Pago por</Label>
-                  <Input
+                  <Select
                     id="paid_by"
                     name="paid_by"
-                    autoComplete="name"
                     value={createForm.paid_by}
-                    onChange={handleInputChange}
+                    onChange={handlePaidByChange}
                     required
-                  />
+                  >
+                    <option value="">Selecione...</option>
+                    <option value="Antônio">Antônio</option>
+                    <option value="Júlia">Júlia</option>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="date">Data</Label>
@@ -645,10 +855,13 @@ export const SpreadsheetDashboard = () => {
                     inputMode="decimal"
                     placeholder="0,00"
                     value={createForm.amount_owed}
-                    onChange={handleInputChange}
-                    required
+                    readOnly
+                    className="bg-muted"
                     aria-invalid={createAmountOwedInvalid}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Calculado automaticamente: metade do valor total (negativo se Júlia pagou, positivo se Antônio pagou)
+                  </p>
                 </div>
                 <div className="md:col-span-2 flex justify-end">
                   <Button type="submit" disabled={createPending || !isCreateFormValid} aria-busy={createPending}>
@@ -666,6 +879,227 @@ export const SpreadsheetDashboard = () => {
                   </Button>
                 </div>
               </form>
+              {error && (
+                <p className="mt-4 text-sm text-destructive" role="alert">
+                  {error}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {uploadDialogOpen && (
+        <div className="fixed inset-0 z-50">
+          <div
+            className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+            onClick={handleCloseUploadDialog}
+            aria-hidden="true"
+          />
+          <div className="relative flex h-full items-center justify-center p-4" onKeyDown={handleUploadDialogKeyDown}>
+            <div
+              className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-lg border border-border bg-card p-6 shadow-lg outline-none"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="upload-dialog-title"
+              aria-describedby="upload-dialog-description"
+            >
+              <div className="flex items-center justify-between">
+                <p id="upload-dialog-title" className="text-lg font-semibold">
+                  Adicionar transações por imagem
+                </p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleCloseUploadDialog}
+                  disabled={analyzing || savePending}
+                  aria-label="Fechar formulário de upload"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <p id="upload-dialog-description" className="mt-2 text-sm text-muted-foreground">
+                Faça upload de uma imagem contendo transações ou cole uma imagem (Ctrl+V). O sistema irá extrair automaticamente as informações.
+              </p>
+
+              <div className="mt-6 space-y-6">
+                {!uploadedImage ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="image-upload">Selecionar imagem ou colar (Ctrl+V)</Label>
+                    <Input
+                      id="image-upload"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      className="cursor-pointer"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Você também pode colar uma imagem usando Ctrl+V quando este dialog estiver aberto
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Imagem selecionada</Label>
+                      <div className="relative">
+                        <img
+                          src={uploadedImage}
+                          alt="Preview"
+                          className="max-h-64 w-full rounded-md border border-border object-contain"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setUploadedImage(null)
+                            setUploadedFile(null)
+                            setExtractedTransactions([])
+                          }}
+                          className="absolute right-2 top-2"
+                          aria-label="Remover imagem"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                    {extractedTransactions.length === 0 && (
+                      <Button
+                        type="button"
+                        onClick={handleAnalyzeImage}
+                        disabled={analyzing}
+                        className="w-full"
+                      >
+                        {analyzing ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Analisando imagem...
+                          </>
+                        ) : (
+                          <>
+                            <ImageIcon className="mr-2 h-4 w-4" />
+                            Analisar imagem
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </div>
+                )}
+
+                {extractedTransactions.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium">
+                        {extractedTransactions.length === 1
+                          ? "1 transação extraída"
+                          : `${extractedTransactions.length} transações extraídas`}
+                      </p>
+                    </div>
+                    <div className="space-y-4 max-h-96 overflow-y-auto">
+                      {extractedTransactions.map((transaction, index) => (
+                        <div key={index} className="rounded-lg border border-border p-4 space-y-3">
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <div className="space-y-2">
+                              <Label htmlFor={`desc-${index}`}>Descrição</Label>
+                              <Input
+                                id={`desc-${index}`}
+                                value={transaction.description}
+                                onChange={e =>
+                                  handleUpdateExtractedTransaction(index, "description", e.target.value)
+                                }
+                                required
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor={`date-${index}`}>Data</Label>
+                              <Input
+                                id={`date-${index}`}
+                                type="date"
+                                value={transaction.date}
+                                onChange={e => handleUpdateExtractedTransaction(index, "date", e.target.value)}
+                                required
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor={`amount-${index}`}>Valor total</Label>
+                              <Input
+                                id={`amount-${index}`}
+                                type="number"
+                                step="0.01"
+                                value={transaction.amount}
+                                onChange={e =>
+                                  handleUpdateExtractedTransaction(index, "amount", parseFloat(e.target.value) || 0)
+                                }
+                                required
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor={`paid_by-${index}`}>Pago por</Label>
+                              <Select
+                                id={`paid_by-${index}`}
+                                value={transaction.paid_by}
+                                onChange={e => handleUpdateExtractedTransaction(index, "paid_by", e.target.value)}
+                                required
+                              >
+                                <option value="">Selecione...</option>
+                                <option value="Antônio">Antônio</option>
+                                <option value="Júlia">Júlia</option>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor={`amount_owed-${index}`}>Valor devido</Label>
+                              <Input
+                                id={`amount_owed-${index}`}
+                                type="number"
+                                step="0.01"
+                                value={transaction.amount_owed}
+                                readOnly
+                                className="bg-muted"
+                                required
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                Calculado automaticamente
+                              </p>
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor={`category-${index}`}>Categoria</Label>
+                              <Input
+                                id={`category-${index}`}
+                                value={transaction.category}
+                                onChange={e => handleUpdateExtractedTransaction(index, "category", e.target.value)}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleCloseUploadDialog}
+                        disabled={savePending}
+                      >
+                        Cancelar
+                      </Button>
+                      <Button type="button" onClick={handleSaveExtractedTransactions} disabled={savePending}>
+                        {savePending ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Salvando...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="mr-2 h-4 w-4" />
+                            Salvar todas as transações
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
               {error && (
                 <p className="mt-4 text-sm text-destructive" role="alert">
                   {error}
@@ -752,6 +1186,53 @@ export const SpreadsheetDashboard = () => {
                 <FilterX className="mr-2 h-4 w-4" aria-hidden="true" />
                 Limpar
               </Button>
+              <div className="relative">
+                <Button
+                  ref={createButtonRef}
+                  type="button"
+                  onClick={() => setAddMenuOpen(!addMenuOpen)}
+                  aria-haspopup="menu"
+                  aria-expanded={addMenuOpen}
+                  className="h-11"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Adicionar transação
+                  <ChevronDown className="ml-2 h-4 w-4" />
+                </Button>
+                {addMenuOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={() => setAddMenuOpen(false)}
+                      aria-hidden="true"
+                    />
+                    <div className="absolute right-0 top-full z-20 mt-2 w-56 rounded-md border border-border bg-card shadow-lg">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAddMenuOpen(false)
+                          handleOpenCreateDialog()
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-accent"
+                      >
+                        <Plus className="mr-2 inline h-4 w-4" />
+                        Adicionar manualmente
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAddMenuOpen(false)
+                          handleOpenUploadDialog()
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-accent"
+                      >
+                        <Upload className="mr-2 inline h-4 w-4" />
+                        Adicionar por imagem
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>
