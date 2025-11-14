@@ -166,24 +166,22 @@ export const BalanceChart = (props: { series: BalancePoint[] }) => {
     if (!element) {
       return
     }
-    const syncWidth = (value: number) => {
-      if (!Number.isFinite(value) || value <= 0) {
+    const syncWidth = () => {
+      const rect = element.getBoundingClientRect()
+      const totalWidth = rect.width
+      if (!Number.isFinite(totalWidth) || totalWidth <= 0) {
         return
       }
       setWidth(previous => {
-        if (Math.abs(previous - value) < 1) {
+        if (Math.abs(previous - totalWidth) < 1) {
           return previous
         }
-        return value
+        return totalWidth
       })
     }
-    syncWidth(element.getBoundingClientRect().width)
-    const observer = new ResizeObserver(entries => {
-      const entry = entries[0]
-      if (!entry) {
-        return
-      }
-      syncWidth(entry.contentRect.width)
+    syncWidth()
+    const observer = new ResizeObserver(() => {
+      syncWidth()
     })
     observer.observe(element)
     return () => observer.disconnect()
@@ -651,7 +649,7 @@ export const BalanceChart = (props: { series: BalancePoint[] }) => {
           </div>
         </div>
       </div>
-      <div className="relative w-full">
+      <div className="relative -mx-6 w-[calc(100%+3rem)]">
         {variationSummary && (
           <div className="pointer-events-none absolute right-4 top-4 z-10 min-w-[160px] rounded-2xl border border-border/70 bg-background/90 px-4 py-3 text-right text-xs shadow-lg backdrop-blur">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Variação</p>
