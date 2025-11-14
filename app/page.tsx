@@ -1,5 +1,7 @@
 import { SpreadsheetDashboard } from "@/components/spreadsheet-dashboard"
 
+export const dynamic = 'force-dynamic'
+
 export default function HomePage() {
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-10">
