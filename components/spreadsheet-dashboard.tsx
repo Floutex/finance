@@ -327,18 +327,43 @@ export const SpreadsheetDashboard = () => {
     return sortedTransactions.reduce((total, transaction) => total + (transaction.amount_owed ?? 0), 0)
   }, [sortedTransactions])
 
+  const totalAmount = useMemo(() => {
+    return sortedTransactions.reduce((total, transaction) => total + (transaction.amount ?? 0), 0)
+  }, [sortedTransactions])
+
   const currentMonthStats = useMemo(() => {
     const currentDate = new Date()
     let total = 0
+    let totalAmountInMonth = 0
     let count = 0
     sortedTransactions.forEach(transaction => {
       if (isSameMonth(parseISO(transaction.date), currentDate)) {
         total += transaction.amount_owed ?? 0
+        totalAmountInMonth += transaction.amount ?? 0
         count += 1
       }
     })
-    return { total, count }
+    return { total, totalAmountInMonth, count }
   }, [sortedTransactions])
+
+  const categoryTotals = useMemo(() => {
+    const map = new Map<string, number>()
+    sortedTransactions.forEach(transaction => {
+      const key = normalizeText(transaction.category) || "Sem categoria"
+      const amount = transaction.amount ?? 0
+      map.set(key, (map.get(key) ?? 0) + amount)
+    })
+    return Array.from(map.entries())
+      .map(([category, total]) => ({ category, total }))
+      .sort((first, second) => first.category.localeCompare(second.category, "pt-BR"))
+  }, [sortedTransactions])
+
+  const totalCategoryAmount = useMemo(() => {
+    if (categoryTotals.length === 0) {
+      return 0
+    }
+    return categoryTotals.reduce((total, item) => total + item.total, 0)
+  }, [categoryTotals])
 
   const monthLabel = useMemo(() => capitalize(format(new Date(), "MMMM", { locale: ptBR })), [])
   const totalTransactions = sortedTransactions.length
@@ -877,6 +902,76 @@ export const SpreadsheetDashboard = () => {
             <p className="text-sm text-muted-foreground">
               {totalTransactions === 1 ? "Transação listada" : "Transações listadas"}
             </p>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader className="space-y-1">
+            <CardTitle>Total gasto</CardTitle>
+            <p className="text-sm text-muted-foreground">Soma dos valores totais no período visível</p>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <p className="text-3xl font-semibold">{formatCurrency(totalAmount)}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="space-y-1">
+            <CardTitle>{`Total gasto em ${monthLabel}`}</CardTitle>
+            <p className="text-sm text-muted-foreground">Soma de valores totais no mês atual</p>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <p className="text-3xl font-semibold">{formatCurrency(currentMonthStats.totalAmountInMonth)}</p>
+            <p className="text-sm text-muted-foreground">
+              {currentMonthStats.count === 1
+                ? "1 lançamento no mês"
+                : `${currentMonthStats.count} lançamentos no mês`}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="space-y-1">
+            <CardTitle>Total por categoria</CardTitle>
+            <p className="text-sm text-muted-foreground">Inclui lançamentos sem categoria</p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {categoryTotals.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nenhuma transação no período</p>
+            ) : (
+              <>
+                <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted">
+                  {categoryTotals.map((item, index) => {
+                    const percentage =
+                      totalCategoryAmount > 0 ? Math.max(2, (item.total / totalCategoryAmount) * 100) : 0
+                    const colors = ["bg-primary", "bg-emerald-400", "bg-sky-400", "bg-amber-400", "bg-pink-400"]
+                    const colorClass = colors[index % colors.length]
+                    return (
+                      <div
+                        key={item.category}
+                        className={cn("h-full", colorClass)}
+                        style={{ width: `${percentage}%` }}
+                      />
+                    )
+                  })}
+                </div>
+                <div className="grid gap-1.5 text-xs">
+                  {categoryTotals.map((item, index) => {
+                    const colors = ["bg-primary", "bg-emerald-400", "bg-sky-400", "bg-amber-400", "bg-pink-400"]
+                    const colorClass = colors[index % colors.length]
+                    return (
+                      <div key={item.category} className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className={cn("h-2 w-2 rounded-full", colorClass)} />
+                          <span className="max-w-[120px] truncate">{item.category}</span>
+                        </div>
+                        <span className="font-medium">{formatCurrency(item.total)}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       </section>
