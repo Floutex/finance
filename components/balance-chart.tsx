@@ -271,7 +271,7 @@ export const BalanceChart = (props: { series: BalancePoint[] }) => {
       top: 24,
       right: 24,
       bottom: 48,
-      left: Math.max(36, Math.ceil(maxLabelWidth) + 16)
+      left: Math.max(48, Math.ceil(maxLabelWidth) + 24)
     }),
     [maxLabelWidth]
   )
@@ -567,18 +567,18 @@ export const BalanceChart = (props: { series: BalancePoint[] }) => {
   const quickRanges: QuickRange[] = ["1M", "3M", "6M", "1A", "ALL"]
   const hasRangeFilter = customRangeActive || activeRange !== null
   return (
-    <div
+    <article
       ref={containerRef}
-      className="relative flex w-full flex-col gap-6 overflow-hidden rounded-2xl border border-border/70 bg-card p-6"
+      className="relative flex w-full flex-col gap-5 overflow-visible rounded-2xl border border-border/70 bg-card p-4 sm:p-5 lg:gap-6 lg:p-6"
     >
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <header className="flex flex-col gap-4 lg:gap-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between lg:gap-4">
           <div className="flex flex-col gap-1">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Período ativo</span>
-            <p className="text-2xl font-semibold text-foreground">{periodLabel}</p>
+            <h2 className="text-xl font-semibold text-foreground md:text-2xl">{periodLabel}</h2>
           </div>
-          <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
-            <div className="flex flex-wrap gap-2 rounded-full bg-muted/50 p-1">
+          <nav className="flex flex-wrap items-center gap-2 lg:gap-3" aria-label="Filtros rápidos de período">
+            <div className="flex flex-wrap gap-1.5 rounded-full bg-muted/50 p-1 lg:gap-2">
               {quickRanges.map(range => (
                 <Button
                   key={range}
@@ -587,7 +587,7 @@ export const BalanceChart = (props: { series: BalancePoint[] }) => {
                   variant="ghost"
                   aria-pressed={activeRange === range}
                   className={cn(
-                    "h-9 rounded-full px-4 text-xs font-semibold transition",
+                    "h-8 rounded-full px-3 text-xs font-semibold transition lg:h-9 lg:px-4",
                     activeRange === range
                       ? "bg-background text-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground"
@@ -606,83 +606,90 @@ export const BalanceChart = (props: { series: BalancePoint[] }) => {
               aria-pressed={hasRangeFilter}
               onClick={clearSelection}
               className={cn(
-                "h-9 rounded-full border px-4 text-xs font-semibold transition",
+                "h-8 rounded-full border px-3 text-xs font-semibold transition lg:h-9 lg:px-4",
                 hasRangeFilter
-                  ? "border-primary/60 bg-primary/10 text-primary"
+                  ? "border-primary/60 bg-primary/10 text-primary hover:bg-primary/20"
                   : "border-dashed border-border text-muted-foreground"
               )}
             >
               Limpar
             </Button>
-          </div>
+          </nav>
         </div>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-            <div className="flex flex-col gap-1">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Início</span>
-              <Input
-                type="date"
-                className={cn(
-                  "h-11 rounded-2xl border border-border bg-background/80 text-sm transition focus-visible:ring-0 sm:w-44",
-                  startDate && "border-primary/60 bg-primary/5 text-foreground shadow-sm"
-                )}
-                value={startDate}
-                min={minDate}
-                max={endDate || maxDate}
-                onChange={event => handleStartChange(event.target.value)}
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Fim</span>
-              <Input
-                type="date"
-                className={cn(
-                  "h-11 rounded-2xl border border-border bg-background/80 text-sm transition focus-visible:ring-0 sm:w-44",
-                  endDate && "border-primary/60 bg-primary/5 text-foreground shadow-sm"
-                )}
-                value={endDate}
-                min={startDate || minDate}
-                max={maxDate}
-                onChange={event => handleEndChange(event.target.value)}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-      <div className="relative -mx-6 w-[calc(100%+3rem)]">
-        {variationSummary && (
-          <div className="pointer-events-none absolute right-4 top-4 z-10 min-w-[160px] rounded-2xl border border-border/70 bg-background/90 px-4 py-3 text-right text-xs shadow-lg backdrop-blur">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Variação</p>
-            <p
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-3 lg:gap-4">
+          <div className="flex flex-col gap-1">
+            <label htmlFor="chart-start-date" className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Início
+            </label>
+            <Input
+              id="chart-start-date"
+              type="date"
               className={cn(
-                "text-lg font-semibold",
-                variationSummary.change >= 0 ? "text-emerald-400" : "text-destructive"
+                "h-10 rounded-2xl border border-border bg-background/80 text-sm transition focus-visible:ring-0 sm:w-40 lg:h-11 lg:w-48",
+                startDate && "border-primary/60 bg-primary/5 text-foreground shadow-sm"
               )}
-            >
-              {formatSignedCurrency(variationSummary.change)}
-            </p>
-            {variationSummary.percentChange !== null && (
-              <p className="text-sm font-medium text-foreground">{formatSignedPercent(variationSummary.percentChange)}</p>
-            )}
-            <p className="text-[11px] text-muted-foreground">
-              {format(parseISO(variationSummary.startDate), "dd/MM")} — {format(parseISO(variationSummary.endDate), "dd/MM")}
-            </p>
+              value={startDate}
+              min={minDate}
+              max={endDate || maxDate}
+              onChange={event => handleStartChange(event.target.value)}
+            />
           </div>
-        )}
-        <svg
-          ref={svgRef}
-          viewBox={`0 0 ${width} ${height}`}
-          preserveAspectRatio="xMidYMid meet"
-          className="w-full text-primary"
-          style={{ aspectRatio: `${width} / ${height}`, minHeight: '280px', maxHeight: '400px' }}
-          aria-label="Evolução do saldo"
-          role="img"
-          onPointerMove={handlePointerMove}
-          onPointerDown={handlePointerDown}
-          onPointerLeave={handlePointerLeave}
-          onPointerUp={handlePointerUp}
-          onPointerCancel={handlePointerUp}
-        >
+          <div className="flex flex-col gap-1">
+            <label htmlFor="chart-end-date" className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Fim
+            </label>
+            <Input
+              id="chart-end-date"
+              type="date"
+              className={cn(
+                "h-10 rounded-2xl border border-border bg-background/80 text-sm transition focus-visible:ring-0 sm:w-40 lg:h-11 lg:w-48",
+                endDate && "border-primary/60 bg-primary/5 text-foreground shadow-sm"
+              )}
+              value={endDate}
+              min={startDate || minDate}
+              max={maxDate}
+              onChange={event => handleEndChange(event.target.value)}
+            />
+          </div>
+        </div>
+      </header>
+
+      <section className="relative flex flex-col gap-3 lg:gap-4" aria-label="Gráfico de evolução do saldo">
+        <div className="relative -mx-4 w-[calc(100%+2rem)] sm:-mx-5 sm:w-[calc(100%+2.5rem)] lg:-mx-6 lg:w-[calc(100%+3rem)]">
+          {variationSummary && (
+            <aside className="pointer-events-none absolute right-3 top-2 z-20 min-w-[140px] rounded-xl border border-border/70 bg-background/90 px-3 py-2.5 text-right shadow-lg backdrop-blur sm:right-4 sm:min-w-[160px] sm:rounded-2xl sm:px-4 sm:py-3 lg:right-5">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:text-[11px]">Variação</p>
+              <p
+                className={cn(
+                  "text-base font-semibold sm:text-lg lg:text-xl",
+                  variationSummary.change >= 0 ? "text-emerald-400" : "text-destructive"
+                )}
+              >
+                {formatSignedCurrency(variationSummary.change)}
+              </p>
+              {variationSummary.percentChange !== null && (
+                <p className="text-xs font-medium text-foreground sm:text-sm">{formatSignedPercent(variationSummary.percentChange)}</p>
+              )}
+              <p className="text-[10px] text-muted-foreground sm:text-[11px]">
+                {format(parseISO(variationSummary.startDate), "dd/MM")} — {format(parseISO(variationSummary.endDate), "dd/MM")}
+              </p>
+            </aside>
+          )}
+
+          <svg
+            ref={svgRef}
+            viewBox={`0 0 ${width} ${height}`}
+            preserveAspectRatio="xMidYMid meet"
+            className="w-full text-primary"
+            style={{ aspectRatio: `${width} / ${height}`, minHeight: '280px', maxHeight: '400px' }}
+            aria-label="Evolução do saldo ao longo do tempo"
+            role="img"
+            onPointerMove={handlePointerMove}
+            onPointerDown={handlePointerDown}
+            onPointerLeave={handlePointerLeave}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+          >
           <defs>
             <linearGradient id="balance-gradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity="0.3" />
@@ -710,7 +717,7 @@ export const BalanceChart = (props: { series: BalancePoint[] }) => {
                       opacity={isZero ? 0.8 : 0.25}
                     />
                     <text
-                      x={chartPadding.left - 8}
+                      x={chartPadding.left - 12}
                       y={position}
                       fill="hsl(var(--muted-foreground))"
                       fontSize={11}
@@ -771,41 +778,47 @@ export const BalanceChart = (props: { series: BalancePoint[] }) => {
               <circle cx={hoverData.x} cy={hoverData.y} r={10} fill="hsl(var(--primary))" opacity={0.2} />
             </>
           )}
-        </svg>
-        {hoverData && tooltipPosition && (
-          <div
-            className="pointer-events-none absolute min-w-[180px] rounded-lg border border-border bg-background/95 px-4 py-3 text-xs shadow-xl backdrop-blur"
-            style={tooltipPosition}
-          >
-            <div className="text-[11px] font-semibold uppercase text-muted-foreground">
-              {format(parseISO(hoverData.point.date), "dd/MM/yyyy")}
-            </div>
-            <div className="mt-1 text-sm font-semibold text-foreground">
-              {formatBalance(hoverData.point.balance)}
-            </div>
-            <div className="mt-2 flex items-center justify-between text-[11px]">
-              <span className="text-muted-foreground">Variação</span>
-              <span className={hoverData.change >= 0 ? "text-emerald-400" : "text-destructive"}>
-                {formatSignedCurrency(hoverData.change)}
-              </span>
-            </div>
-            {hoverData.percentChange !== null && (
-              <div className="mt-1 flex items-center justify-between text-[11px]">
-                <span className="text-muted-foreground">Percentual</span>
-                <span className={hoverData.percentChange >= 0 ? "text-emerald-400" : "text-destructive"}>
-                  {formatSignedPercent(hoverData.percentChange)}
+          </svg>
+
+          {hoverData && tooltipPosition && (
+            <div
+              className="pointer-events-none absolute z-30 min-w-[160px] rounded-lg border border-border bg-background/95 px-3 py-2.5 shadow-xl backdrop-blur sm:min-w-[180px] sm:px-4 sm:py-3 lg:min-w-[200px]"
+              style={tooltipPosition}
+              role="tooltip"
+            >
+              <div className="text-[10px] font-semibold uppercase text-muted-foreground sm:text-[11px]">
+                {format(parseISO(hoverData.point.date), "dd/MM/yyyy")}
+              </div>
+              <div className="mt-1 text-sm font-semibold text-foreground lg:text-base">
+                {formatBalance(hoverData.point.balance)}
+              </div>
+              <div className="mt-1.5 flex items-center justify-between gap-3 text-[10px] sm:mt-2 sm:text-[11px]">
+                <span className="text-muted-foreground">Variação</span>
+                <span className={cn("font-medium", hoverData.change >= 0 ? "text-emerald-400" : "text-destructive")}>
+                  {formatSignedCurrency(hoverData.change)}
                 </span>
               </div>
-            )}
-          </div>
-        )}
-      </div>
-      <div className="flex justify-between text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-        {labels.map(label => (
-          <span key={label}>{format(parseISO(label), "dd/MM")}</span>
-        ))}
-      </div>
-    </div>
+              {hoverData.percentChange !== null && (
+                <div className="mt-1 flex items-center justify-between gap-3 text-[10px] sm:text-[11px]">
+                  <span className="text-muted-foreground">Percentual</span>
+                  <span className={cn("font-medium", hoverData.percentChange >= 0 ? "text-emerald-400" : "text-destructive")}>
+                    {formatSignedPercent(hoverData.percentChange)}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <footer className="flex justify-between px-4 text-[10px] font-medium uppercase tracking-wide text-muted-foreground sm:px-5 sm:text-[11px] lg:px-6" aria-label="Eixo de datas">
+          {labels.map(label => (
+            <time key={label} dateTime={label}>
+              {format(parseISO(label), "dd/MM")}
+            </time>
+          ))}
+        </footer>
+      </section>
+    </article>
   )
 }
 

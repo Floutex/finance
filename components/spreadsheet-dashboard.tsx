@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { format, isSameMonth, parseISO } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { getSupabaseClient } from "@/lib/supabase"
+import { getSupabaseClient, bulkDeleteByIds, bulkUpdateByIds } from "@/lib/supabase"
 import type { Tables, TablesInsert, TablesUpdate } from "@/lib/database.types"
 import { BalanceChart } from "@/components/balance-chart"
 import { Button } from "@/components/ui/button"
@@ -113,6 +113,16 @@ export const SpreadsheetDashboard = () => {
   const [selectedRows, setSelectedRows] = useState<string[]>([])
   const selectAllRef = useRef<HTMLInputElement>(null)
   const [deletePendingId, setDeletePendingId] = useState<string | null>(null)
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [bulkQuickEditOpen, setBulkQuickEditOpen] = useState(false)
+  const [bulkAdvancedEditOpen, setBulkAdvancedEditOpen] = useState(false)
+  const [bulkPending, setBulkPending] = useState(false)
+  const [bulkError, setBulkError] = useState<string | null>(null)
+  const [quickField, setQuickField] = useState<"category" | "paid_by">("category")
+  const [quickValue, setQuickValue] = useState<string>("")
+  const [advancedCategory, setAdvancedCategory] = useState<string>("")
+  const [advancedPaidBy, setAdvancedPaidBy] = useState<string>("")
+  const [advancedDate, setAdvancedDate] = useState<string>("")
   const searchInputRef = useRef<HTMLInputElement>(null)
   const createFirstFieldRef = useRef<HTMLInputElement>(null)
   const createButtonRef = useRef<HTMLButtonElement>(null)
@@ -309,6 +319,9 @@ export const SpreadsheetDashboard = () => {
     setEndDate("")
     searchInputRef.current?.focus()
   }
+  const handleClearSelection = () => {
+    setSelectedRows([])
+  }
 
   const netBalance = useMemo(() => {
     return sortedTransactions.reduce((total, transaction) => total + (transaction.amount_owed ?? 0), 0)
@@ -369,6 +382,44 @@ export const SpreadsheetDashboard = () => {
       : netBalance < 0
         ? `Eu devo ${formatCurrency(Math.abs(netBalance))} para a Júlia`
         : "Estamos quites por enquanto"
+
+  const [localCategories, setLocalCategories] = useState<string[]>([])
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("categoriesOptions")
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (Array.isArray(parsed)) {
+          setLocalCategories(parsed.filter(item => typeof item === "string"))
+        }
+      }
+    } catch {}
+  }, [])
+
+  const categoriesOptions = useMemo(() => {
+    const set = new Set<string>()
+    transactions.forEach(t => {
+      const c = normalizeText(t.category)
+      if (c) set.add(c)
+    })
+    localCategories.forEach(c => {
+      const v = normalizeText(c)
+      if (v) set.add(v)
+    })
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"))
+  }, [transactions, localCategories])
+
+  const handleAddCategoryOption = (value: string) => {
+    const v = normalizeText(value)
+    if (!v) return
+    if (categoriesOptions.includes(v)) return
+    const next = [...new Set([...(localCategories ?? []), v])].sort((a, b) => a.localeCompare(b, "pt-BR"))
+    setLocalCategories(next)
+    try {
+      localStorage.setItem("categoriesOptions", JSON.stringify(next))
+    } catch {}
+  }
 
   const handleSortToggle = (field: SortField) => {
     if (sortField === field) {
@@ -696,6 +747,83 @@ export const SpreadsheetDashboard = () => {
     return sortDirection === "asc" ? "ascending" : "descending"
   }
 
+  const handleConfirmBulkDelete = async () => {
+    if (selectedRows.length === 0) {
+      return
+    }
+    setBulkPending(true)
+    setBulkError(null)
+    const { error } = await bulkDeleteByIds("shared_transactions", selectedRows)
+    if (error) {
+      setBulkError(error.message)
+      setBulkPending(false)
+      return
+    }
+    await loadTransactions()
+    setSelectedRows([])
+    setBulkPending(false)
+    setBulkDeleteOpen(false)
+  }
+
+  const handleConfirmQuickEdit = async () => {
+    if (selectedRows.length === 0) {
+      return
+    }
+    const values: any = {}
+    if (quickField === "category") {
+      values.category = quickValue.trim() || null
+    } else if (quickField === "paid_by") {
+      values.paid_by = quickValue.trim()
+    }
+    setBulkPending(true)
+    setBulkError(null)
+    const { error } = await bulkUpdateByIds("shared_transactions", selectedRows, values)
+    if (error) {
+      setBulkError(error.message)
+      setBulkPending(false)
+      return
+    }
+    await loadTransactions()
+    setSelectedRows([])
+    setBulkPending(false)
+    setBulkQuickEditOpen(false)
+    setQuickValue("")
+  }
+
+  const handleConfirmAdvancedEdit = async () => {
+    if (selectedRows.length === 0) {
+      return
+    }
+    const values: any = {}
+    if (advancedCategory.trim().length > 0) {
+      values.category = advancedCategory.trim()
+    }
+    if (advancedPaidBy.trim().length > 0) {
+      values.paid_by = advancedPaidBy.trim()
+    }
+    if (advancedDate.trim().length > 0) {
+      values.date = advancedDate.trim()
+    }
+    if (Object.keys(values).length === 0) {
+      return
+    }
+    setBulkPending(true)
+    setBulkError(null)
+    const { error } = await bulkUpdateByIds("shared_transactions", selectedRows, values)
+    if (error) {
+      setBulkError(error.message)
+      setBulkPending(false)
+      return
+    }
+    await loadTransactions()
+    setSelectedRows([])
+    setBulkPending(false)
+    setBulkAdvancedEditOpen(false)
+    setAdvancedCategory("")
+    setAdvancedPaidBy("")
+    setAdvancedDate("")
+  }
+
   const sortableColumns: Array<{ key: SortField; label: string; align?: "right"; labelClassName?: string }> = [
     { key: "description", label: "Descrição" },
     { key: "category", label: "Categoria" },
@@ -707,6 +835,11 @@ export const SpreadsheetDashboard = () => {
 
   return (
     <div className="space-y-8">
+      <datalist id="categories-list">
+        {categoriesOptions.map(option => (
+          <option key={option} value={option} />
+        ))}
+      </datalist>
       <section className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="space-y-1">
@@ -803,10 +936,23 @@ export const SpreadsheetDashboard = () => {
                   <Input
                     id="category"
                     name="category"
+                    list="categories-list"
                     autoComplete="off"
                     value={createForm.category}
                     onChange={handleInputChange}
                   />
+                  {createForm.category.trim() && !categoriesOptions.includes(createForm.category.trim()) && (
+                    <div className="pt-1">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleAddCategoryOption(createForm.category)}
+                      >
+                        Adicionar "{createForm.category.trim()}"
+                      </Button>
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="paid_by">Pago por</Label>
@@ -1064,11 +1210,27 @@ export const SpreadsheetDashboard = () => {
                             </div>
                             <div className="space-y-2">
                               <Label htmlFor={`category-${index}`}>Categoria</Label>
-                              <Input
-                                id={`category-${index}`}
-                                value={transaction.category}
-                                onChange={e => handleUpdateExtractedTransaction(index, "category", e.target.value)}
-                              />
+                              <div>
+                                <Input
+                                  id={`category-${index}`}
+                                  list="categories-list"
+                                  value={transaction.category}
+                                  onChange={e => handleUpdateExtractedTransaction(index, "category", e.target.value)}
+                                />
+                                {transaction.category.trim() &&
+                                  !categoriesOptions.includes(transaction.category.trim()) && (
+                                    <div className="pt-1">
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleAddCategoryOption(transaction.category)}
+                                      >
+                                        Adicionar "{transaction.category.trim()}"
+                                      </Button>
+                                    </div>
+                                  )}
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -1110,11 +1272,149 @@ export const SpreadsheetDashboard = () => {
         </div>
       )}
 
+      {bulkDeleteOpen && (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={() => setBulkDeleteOpen(false)} aria-hidden="true" />
+          <div className="relative flex h-full items-center justify-center p-4">
+            <div className="w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-lg outline-none" role="dialog" aria-modal="true" aria-labelledby="bulk-delete-title">
+              <div className="flex items-center justify-between">
+                <p id="bulk-delete-title" className="text-lg font-semibold">Excluir transações selecionadas</p>
+                <Button type="button" variant="ghost" size="icon" onClick={() => setBulkDeleteOpen(false)} disabled={bulkPending} aria-label="Fechar" className="h-8 w-8">
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {selectedRows.length === 1 ? "Deseja excluir 1 transação?" : `Deseja excluir ${selectedRows.length} transações?`}
+              </p>
+              <div className="mt-6 flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setBulkDeleteOpen(false)} disabled={bulkPending}>Cancelar</Button>
+                <Button type="button" onClick={handleConfirmBulkDelete} disabled={bulkPending}>
+                  {bulkPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Excluindo...</> : <><Trash2 className="mr-2 h-4 w-4" />Excluir</>}
+                </Button>
+              </div>
+              {bulkError && <p className="mt-4 text-sm text-destructive" role="alert">{bulkError}</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {bulkQuickEditOpen && (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={() => setBulkQuickEditOpen(false)} aria-hidden="true" />
+          <div className="relative flex h-full items-center justify-center p-4">
+            <div className="w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-lg outline-none" role="dialog" aria-modal="true" aria-labelledby="bulk-quick-title">
+              <div className="flex items-center justify-between">
+                <p id="bulk-quick-title" className="text-lg font-semibold">Edição rápida</p>
+                <Button type="button" variant="ghost" size="icon" onClick={() => setBulkQuickEditOpen(false)} disabled={bulkPending} aria-label="Fechar" className="h-8 w-8">
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="mt-6 space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="quick-field">Campo</Label>
+                  <Select id="quick-field" value={quickField} onChange={e => setQuickField(e.target.value as any)}>
+                    <option value="category">Categoria</option>
+                    <option value="paid_by">Pago por</option>
+                  </Select>
+                </div>
+                {quickField === "category" ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="quick-value">Novo valor</Label>
+                    <Input id="quick-value" value={quickValue} onChange={e => setQuickValue(e.target.value)} list="categories-list" />
+                    {quickValue.trim() && !categoriesOptions.includes(quickValue.trim()) && (
+                      <div className="pt-1">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleAddCategoryOption(quickValue)}
+                        >
+                          Adicionar "{quickValue.trim()}"
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label htmlFor="quick-paid-by">Pago por</Label>
+                    <Select id="quick-paid-by" value={quickValue} onChange={e => setQuickValue(e.target.value)}>
+                      <option value="">Selecione...</option>
+                      <option value="Antônio">Antônio</option>
+                      <option value="Júlia">Júlia</option>
+                    </Select>
+                  </div>
+                )}
+              </div>
+              <div className="mt-6 flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setBulkQuickEditOpen(false)} disabled={bulkPending}>Cancelar</Button>
+                <Button type="button" onClick={handleConfirmQuickEdit} disabled={bulkPending || (quickField === "paid_by" && !quickValue)}>
+                  {bulkPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Salvando...</> : <><Save className="mr-2 h-4 w-4" />Aplicar</>}
+                </Button>
+              </div>
+              {bulkError && <p className="mt-4 text-sm text-destructive" role="alert">{bulkError}</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {bulkAdvancedEditOpen && (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={() => setBulkAdvancedEditOpen(false)} aria-hidden="true" />
+          <div className="relative flex h-full items-center justify-center p-4">
+            <div className="w-full max-w-lg rounded-lg border border-border bg-card p-6 shadow-lg outline-none" role="dialog" aria-modal="true" aria-labelledby="bulk-adv-title">
+              <div className="flex items-center justify-between">
+                <p id="bulk-adv-title" className="text-lg font-semibold">Edição avançada</p>
+                <Button type="button" variant="ghost" size="icon" onClick={() => setBulkAdvancedEditOpen(false)} disabled={bulkPending} aria-label="Fechar" className="h-8 w-8">
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="mt-6 grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="adv-category">Categoria</Label>
+                  <Input id="adv-category" value={advancedCategory} onChange={e => setAdvancedCategory(e.target.value)} list="categories-list" />
+                  {advancedCategory.trim() && !categoriesOptions.includes(advancedCategory.trim()) && (
+                    <div className="pt-1">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleAddCategoryOption(advancedCategory)}
+                      >
+                        Adicionar "{advancedCategory.trim()}"
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="adv-paid-by">Pago por</Label>
+                  <Select id="adv-paid-by" value={advancedPaidBy} onChange={e => setAdvancedPaidBy(e.target.value)}>
+                    <option value="">Selecione...</option>
+                    <option value="Antônio">Antônio</option>
+                    <option value="Júlia">Júlia</option>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="adv-date">Data</Label>
+                  <Input id="adv-date" type="date" value={advancedDate} onChange={e => setAdvancedDate(e.target.value)} />
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setBulkAdvancedEditOpen(false)} disabled={bulkPending}>Cancelar</Button>
+                <Button type="button" onClick={handleConfirmAdvancedEdit} disabled={bulkPending || (!advancedCategory && !advancedPaidBy && !advancedDate)}>
+                  {bulkPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Salvando...</> : <><Save className="mr-2 h-4 w-4" />Aplicar</>}
+                </Button>
+              </div>
+              {bulkError && <p className="mt-4 text-sm text-destructive" role="alert">{bulkError}</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
       <section className="space-y-4">
-        <div className="rounded-2xl border border-border bg-card/70 p-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex w-full flex-col gap-2 lg:max-w-xl">
-              <Label htmlFor="search" className="sr-only">
+        <div className="rounded-2xl border border-border bg-card/70 p-6 shadow-sm">
+          <div className="flex flex-col gap-6">
+            <div className="flex w-full flex-col gap-2">
+              <Label htmlFor="search" className="text-sm font-semibold">
                 Buscar
               </Label>
               <div className="relative">
@@ -1130,33 +1430,35 @@ export const SpreadsheetDashboard = () => {
                   value={search}
                   onChange={event => setSearch(event.target.value)}
                   className={cn(
-                    "h-11 w-full rounded-2xl border border-border bg-background/80 pl-11 text-sm",
+                    "h-11 w-full rounded-xl border border-border bg-background/80 pl-11 text-sm transition-all",
                     search.trim() && "border-primary/60 bg-primary/5 text-foreground shadow-sm"
                   )}
                   aria-controls="transactions-table"
                 />
               </div>
             </div>
-            <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto">
-              <div className="flex w-full flex-col gap-2 sm:w-auto">
-                <Label htmlFor="startDate" className="sr-only">
-                  Data inicial
-                </Label>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="startDate" className="text-sm font-semibold">
+                    Data inicial
+                  </Label>
                   <Input
                     id="startDate"
                     type="date"
                     value={startDate}
                     onChange={event => setStartDate(event.target.value)}
                     className={cn(
-                      "h-11 rounded-2xl border border-border bg-background/80 text-sm transition focus-visible:ring-0 sm:w-40",
+                      "h-11 rounded-xl border border-border bg-background/80 text-sm transition-all focus-visible:ring-0 sm:w-44",
                       startDate && "border-primary/60 bg-primary/5 text-foreground shadow-sm"
                     )}
                   />
-                  <span className="hidden text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:inline">
-                    até
-                  </span>
-                  <Label htmlFor="endDate" className="sr-only">
+                </div>
+                <div className="flex items-center justify-center pb-2 sm:px-2">
+                  <span className="text-xs font-medium text-muted-foreground">até</span>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="endDate" className="text-sm font-semibold">
                     Data final
                   </Label>
                   <Input
@@ -1165,73 +1467,75 @@ export const SpreadsheetDashboard = () => {
                     value={endDate}
                     onChange={event => setEndDate(event.target.value)}
                     className={cn(
-                      "h-11 rounded-2xl border border-border bg-background/80 text-sm transition focus-visible:ring-0 sm:w-40",
+                      "h-11 rounded-xl border border-border bg-background/80 text-sm transition-all focus-visible:ring-0 sm:w-44",
                       endDate && "border-primary/60 bg-primary/5 text-foreground shadow-sm"
                     )}
                   />
                 </div>
               </div>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={handleResetFilters}
-                disabled={!hasActiveFilters}
-                className={cn(
-                  "h-11 rounded-full border px-5 text-sm font-semibold transition",
-                  hasActiveFilters
-                    ? "border-primary/60 bg-primary/10 text-primary"
-                    : "border-dashed border-border text-muted-foreground"
-                )}
-              >
-                <FilterX className="mr-2 h-4 w-4" aria-hidden="true" />
-                Limpar
-              </Button>
-              <div className="relative">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                 <Button
-                  ref={createButtonRef}
                   type="button"
-                  onClick={() => setAddMenuOpen(!addMenuOpen)}
-                  aria-haspopup="menu"
-                  aria-expanded={addMenuOpen}
-                  className="h-11"
+                  variant="ghost"
+                  onClick={handleResetFilters}
+                  disabled={!hasActiveFilters}
+                  className={cn(
+                    "h-11 rounded-xl border px-5 text-sm font-semibold transition-all",
+                    hasActiveFilters
+                      ? "border-primary/60 bg-primary/10 text-primary hover:bg-primary/20"
+                      : "border-dashed border-border text-muted-foreground"
+                  )}
                 >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Adicionar transação
-                  <ChevronDown className="ml-2 h-4 w-4" />
+                  <FilterX className="mr-2 h-4 w-4" aria-hidden="true" />
+                  Limpar filtros
                 </Button>
-                {addMenuOpen && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-10"
-                      onClick={() => setAddMenuOpen(false)}
-                      aria-hidden="true"
-                    />
-                    <div className="absolute right-0 top-full z-20 mt-2 w-56 rounded-md border border-border bg-card shadow-lg">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAddMenuOpen(false)
-                          handleOpenCreateDialog()
-                        }}
-                        className="w-full px-4 py-2 text-left text-sm hover:bg-accent"
-                      >
-                        <Plus className="mr-2 inline h-4 w-4" />
-                        Adicionar manualmente
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAddMenuOpen(false)
-                          handleOpenUploadDialog()
-                        }}
-                        className="w-full px-4 py-2 text-left text-sm hover:bg-accent"
-                      >
-                        <Upload className="mr-2 inline h-4 w-4" />
-                        Adicionar por imagem
-                      </button>
-                    </div>
-                  </>
-                )}
+                <div className="relative">
+                  <Button
+                    ref={createButtonRef}
+                    type="button"
+                    onClick={() => setAddMenuOpen(!addMenuOpen)}
+                    aria-haspopup="menu"
+                    aria-expanded={addMenuOpen}
+                    className="h-11 rounded-xl"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Adicionar transação
+                    <ChevronDown className="ml-2 h-4 w-4" />
+                  </Button>
+                  {addMenuOpen && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-10"
+                        onClick={() => setAddMenuOpen(false)}
+                        aria-hidden="true"
+                      />
+                      <div className="absolute right-0 top-full z-20 mt-2 w-56 rounded-lg border border-border bg-card shadow-lg">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAddMenuOpen(false)
+                            handleOpenCreateDialog()
+                          }}
+                          className="w-full px-4 py-2.5 text-left text-sm transition-colors hover:bg-accent"
+                        >
+                          <Plus className="mr-2 inline h-4 w-4" />
+                          Adicionar manualmente
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAddMenuOpen(false)
+                            handleOpenUploadDialog()
+                          }}
+                          className="w-full px-4 py-2.5 text-left text-sm transition-colors hover:bg-accent"
+                        >
+                          <Upload className="mr-2 inline h-4 w-4" />
+                          Adicionar por imagem
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -1242,9 +1546,35 @@ export const SpreadsheetDashboard = () => {
             {resultsSummary}
           </p>
           {selectionSummary && (
-            <p className="text-sm font-medium text-foreground" role="status" aria-live="polite">
-              {selectionSummary}
-            </p>
+            <div className="flex items-center gap-3">
+              <p className="text-sm font-medium text-foreground" role="status" aria-live="polite">
+                {selectionSummary}
+              </p>
+              <div className="flex items-center gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => setBulkQuickEditOpen(true)} disabled={selectedRows.length === 0}>
+                  <Pencil className="mr-2 h-3 w-3" />
+                  Editar
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => setBulkAdvancedEditOpen(true)} disabled={selectedRows.length === 0}>
+                  <Pencil className="mr-2 h-3 w-3" />
+                  Edição avançada…
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setBulkDeleteOpen(true)}
+                  disabled={selectedRows.length === 0}
+                >
+                  <Trash2 className="mr-2 h-3 w-3" />
+                  Excluir
+                </Button>
+                <Button type="button" variant="ghost" size="sm" onClick={handleClearSelection}>
+                  <X className="mr-2 h-3 w-3" />
+                  Limpar seleção
+                </Button>
+              </div>
+            </div>
           )}
         </div>
 
@@ -1364,7 +1694,21 @@ export const SpreadsheetDashboard = () => {
                       <td className="px-4 py-1.5 align-middle text-sm text-slate-300">
                         <div className="flex items-center">
                           {isEditing ? (
-                            <Input name="category" value={editForm.category} onChange={handleEditInputChange} />
+                            <div className="w-full">
+                              <Input name="category" value={editForm.category} onChange={handleEditInputChange} list="categories-list" />
+                              {editForm.category.trim() && !categoriesOptions.includes(editForm.category.trim()) && (
+                                <div className="pt-1">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleAddCategoryOption(editForm.category)}
+                                  >
+                                    Adicionar "{editForm.category.trim()}"
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
                           ) : (
                             normalizeText(transaction.category) || "—"
                           )}

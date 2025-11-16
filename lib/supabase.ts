@@ -23,3 +23,38 @@ export const getSupabaseClient = () => {
   return browserClient
 }
 
+export const bulkDeleteByIds = async (table: keyof Database["public"]["Tables"], ids: string[]) => {
+  const client = getSupabaseClient()
+  return await client.from(table as "shared_transactions").delete().in("id", ids)
+}
+
+export const bulkUpdateByIds = async <T extends keyof Database["public"]["Tables"]>(
+  table: T,
+  ids: string[],
+  values: Partial<Database["public"]["Tables"][T]["Update"]>
+) => {
+  const client = getSupabaseClient()
+  return await client.from(table as "shared_transactions").update(values as any).in("id", ids).select("*")
+}
+
+export const getCategories = async () => {
+  const client = getSupabaseClient()
+  return await client.from("categories").select("*").order("name", { ascending: true })
+}
+
+export const upsertCategory = async (name: string) => {
+  const client = getSupabaseClient()
+  const value = name.trim()
+  if (!value) {
+    return { data: null, error: null }
+  }
+  const { data: existing, error: fetchError } = await client.from("categories").select("name").eq("name", value).maybeSingle()
+  if (fetchError) {
+    return { data: null, error: fetchError }
+  }
+  if (existing) {
+    return { data: existing, error: null }
+  }
+  return await client.from("categories").insert({ name: value }).select("name").single()
+}
+
