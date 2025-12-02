@@ -6,6 +6,7 @@ import { ptBR } from "date-fns/locale"
 import { getSupabaseClient, bulkDeleteByIds, bulkUpdateByIds } from "@/lib/supabase"
 import type { Tables, TablesInsert, TablesUpdate } from "@/lib/database.types"
 import { BalanceChart } from "@/components/balance-chart"
+import { CategoryPieChart } from "@/components/category-pie-chart"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -98,6 +99,7 @@ export const SpreadsheetDashboard = () => {
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc")
   const [createForm, setCreateForm] = useState<FormState>(initialFormState)
+  const [createOnlyBalance, setCreateOnlyBalance] = useState(false)
   const [createPending, setCreatePending] = useState(false)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
@@ -257,17 +259,28 @@ export const SpreadsheetDashboard = () => {
     return Boolean(search.trim() || startDate || endDate)
   }, [search, startDate, endDate])
 
-  const createAmountValue = useMemo(() => normalizeNumber(createForm.amount), [createForm.amount])
+  const createAmountValue = useMemo(() => {
+    if (createOnlyBalance) {
+      const owed = normalizeNumber(createForm.amount_owed)
+      return owed !== null ? Math.abs(owed) : null
+    }
+    return normalizeNumber(createForm.amount)
+  }, [createForm.amount, createOnlyBalance, createForm.amount_owed])
+
   const createAmountOwedValue = useMemo(() => {
-    if (createForm.amount.trim() && createForm.paid_by) {
+    if (!createOnlyBalance && createForm.amount.trim() && createForm.paid_by) {
       const amount = normalizeNumber(createForm.amount)
       if (amount !== null) {
         return createForm.paid_by === "Júlia" ? -amount / 2 : amount / 2
       }
     }
-    return normalizeNumber(createForm.amount_owed)
-  }, [createForm.amount, createForm.paid_by, createForm.amount_owed])
-  const createAmountInvalid = createForm.amount.trim().length > 0 && createAmountValue === null
+    const val = normalizeNumber(createForm.amount_owed)
+    if (createOnlyBalance && val !== null && createForm.paid_by) {
+      return createForm.paid_by === "Júlia" ? -Math.abs(val) : Math.abs(val)
+    }
+    return val
+  }, [createForm.amount, createForm.paid_by, createForm.amount_owed, createOnlyBalance])
+  const createAmountInvalid = !createOnlyBalance && createForm.amount.trim().length > 0 && createAmountValue === null
   const createAmountOwedInvalid = false
 
   const isCreateFormValid = useMemo(() => {
@@ -419,7 +432,7 @@ export const SpreadsheetDashboard = () => {
           setLocalCategories(parsed.filter(item => typeof item === "string"))
         }
       }
-    } catch {}
+    } catch { }
   }, [])
 
   const categoriesOptions = useMemo(() => {
@@ -443,7 +456,7 @@ export const SpreadsheetDashboard = () => {
     setLocalCategories(next)
     try {
       localStorage.setItem("categoriesOptions", JSON.stringify(next))
-    } catch {}
+    } catch { }
   }
 
   const handleSortToggle = (field: SortField) => {
@@ -481,7 +494,9 @@ export const SpreadsheetDashboard = () => {
       setError(insertError.message)
     } else if (data) {
       setTransactions(previous => [data, ...previous])
+      setTransactions(previous => [data, ...previous])
       setCreateForm(initialFormState())
+      setCreateOnlyBalance(false)
       setCreateDialogOpen(false)
     }
     setCreatePending(false)
@@ -489,6 +504,7 @@ export const SpreadsheetDashboard = () => {
 
   const handleOpenCreateDialog = () => {
     setCreateForm(initialFormState())
+    setCreateOnlyBalance(false)
     setError(null)
     setCreateDialogOpen(true)
   }
@@ -500,6 +516,7 @@ export const SpreadsheetDashboard = () => {
     setCreateDialogOpen(false)
     setError(null)
     setCreateForm(initialFormState())
+    setCreateOnlyBalance(false)
     requestAnimationFrame(() => {
       createButtonRef.current?.focus()
     })
@@ -568,7 +585,7 @@ export const SpreadsheetDashboard = () => {
     const { name, value } = event.target
     setCreateForm(previous => {
       const updated = { ...previous, [name]: value }
-      if (name === "amount" || name === "paid_by") {
+      if (!createOnlyBalance && (name === "amount" || name === "paid_by")) {
         const amount = normalizeNumber(updated.amount)
         if (amount !== null && (updated.paid_by === "Antônio" || updated.paid_by === "Júlia")) {
           updated.amount_owed = String(updated.paid_by === "Júlia" ? -amount / 2 : amount / 2)
@@ -582,9 +599,11 @@ export const SpreadsheetDashboard = () => {
     const value = event.target.value
     setCreateForm(previous => {
       const updated = { ...previous, paid_by: value }
-      const amount = normalizeNumber(updated.amount)
-      if (amount !== null && (value === "Antônio" || value === "Júlia")) {
-        updated.amount_owed = String(value === "Júlia" ? -amount / 2 : amount / 2)
+      if (!createOnlyBalance) {
+        const amount = normalizeNumber(updated.amount)
+        if (amount !== null && (value === "Antônio" || value === "Júlia")) {
+          updated.amount_owed = String(value === "Júlia" ? -amount / 2 : amount / 2)
+        }
       }
       return updated
     })
@@ -935,43 +954,8 @@ export const SpreadsheetDashboard = () => {
             <CardTitle>Total por categoria</CardTitle>
             <p className="text-sm text-muted-foreground">Inclui lançamentos sem categoria</p>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {categoryTotals.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nenhuma transação no período</p>
-            ) : (
-              <>
-                <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted">
-                  {categoryTotals.map((item, index) => {
-                    const percentage =
-                      totalCategoryAmount > 0 ? Math.max(2, (item.total / totalCategoryAmount) * 100) : 0
-                    const colors = ["bg-primary", "bg-emerald-400", "bg-sky-400", "bg-amber-400", "bg-pink-400"]
-                    const colorClass = colors[index % colors.length]
-                    return (
-                      <div
-                        key={item.category}
-                        className={cn("h-full", colorClass)}
-                        style={{ width: `${percentage}%` }}
-                      />
-                    )
-                  })}
-                </div>
-                <div className="grid gap-1.5 text-xs">
-                  {categoryTotals.map((item, index) => {
-                    const colors = ["bg-primary", "bg-emerald-400", "bg-sky-400", "bg-amber-400", "bg-pink-400"]
-                    const colorClass = colors[index % colors.length]
-                    return (
-                      <div key={item.category} className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className={cn("h-2 w-2 rounded-full", colorClass)} />
-                          <span className="max-w-[120px] truncate">{item.category}</span>
-                        </div>
-                        <span className="font-medium">{formatCurrency(item.total)}</span>
-                      </div>
-                    )
-                  })}
-                </div>
-              </>
-            )}
+          <CardContent className="p-6 pt-0">
+            <CategoryPieChart data={categoryTotals} />
           </CardContent>
         </Card>
       </section>
@@ -1085,10 +1069,31 @@ export const SpreadsheetDashboard = () => {
                     value={createForm.amount}
                     onChange={handleInputChange}
                     aria-invalid={createAmountInvalid}
+                    disabled={createOnlyBalance}
+                    className={createOnlyBalance ? "bg-muted" : ""}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="amount_owed">Saldo</Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="amount_owed">Saldo</Label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="onlyBalance"
+                        checked={createOnlyBalance}
+                        onChange={e => {
+                          setCreateOnlyBalance(e.target.checked)
+                          if (e.target.checked) {
+                            setCreateForm(prev => ({ ...prev, amount: "" }))
+                          }
+                        }}
+                        className="h-4 w-4 rounded border-primary text-primary focus:ring-primary"
+                      />
+                      <Label htmlFor="onlyBalance" className="text-xs font-normal cursor-pointer">
+                        Informar apenas saldo
+                      </Label>
+                    </div>
+                  </div>
                   <Input
                     id="amount_owed"
                     name="amount_owed"
@@ -1096,12 +1101,15 @@ export const SpreadsheetDashboard = () => {
                     inputMode="decimal"
                     placeholder="0,00"
                     value={createForm.amount_owed}
-                    readOnly
-                    className="bg-muted"
+                    onChange={handleInputChange}
+                    readOnly={!createOnlyBalance}
+                    className={!createOnlyBalance ? "bg-muted" : ""}
                     aria-invalid={createAmountOwedInvalid}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Calculado automaticamente: metade do valor total (negativo se Júlia pagou, positivo se Antônio pagou)
+                    {createOnlyBalance
+                      ? "Informe o valor do saldo (será considerado o total)"
+                      : "Calculado automaticamente: metade do valor total"}
                   </p>
                 </div>
                 <div className="md:col-span-2 flex justify-end">
