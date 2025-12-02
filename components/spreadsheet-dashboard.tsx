@@ -425,6 +425,14 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
 
   const myDebts = simplifiedDebts.filter(d => d.from === currentUser || d.to === currentUser)
 
+  const totalBalance = useMemo(() => {
+    return myDebts.reduce((acc, debt) => {
+      if (debt.from === currentUser) return acc - debt.amount
+      if (debt.to === currentUser) return acc + debt.amount
+      return acc
+    }, 0)
+  }, [myDebts, currentUser])
+
   const [localCategories, setLocalCategories] = useState<string[]>([])
 
   useEffect(() => {
@@ -907,21 +915,32 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
             )}
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="space-y-1">
-            <CardTitle>Número de lançamentos</CardTitle>
-            <p className="text-sm text-muted-foreground">Visíveis no período</p>
+            <CardTitle>Saldo Total</CardTitle>
+            <p className="text-sm text-muted-foreground">Balanço geral de dívidas</p>
           </CardHeader>
           <CardContent className="space-y-2">
-            <p className="text-3xl font-semibold">{totalTransactions}</p>
+            <p className={cn("text-3xl font-semibold", totalBalance >= 0 ? "text-green-600" : "text-destructive")}>
+              {formatCurrency(totalBalance)}
+            </p>
             <p className="text-sm text-muted-foreground">
-              {totalTransactions === 1 ? "Transação listada" : "Transações listadas"}
+              {totalBalance > 0 ? "Você tem a receber" : totalBalance < 0 ? "Você deve no total" : "Tudo quitado"}
             </p>
           </CardContent>
         </Card>
-      </section>
 
-      <section className="grid gap-4 md:grid-cols-3">
+        <Card className="md:row-span-2 flex flex-col">
+          <CardHeader className="space-y-1">
+            <CardTitle>Total por categoria</CardTitle>
+            <p className="text-sm text-muted-foreground">Inclui lançamentos sem categoria</p>
+          </CardHeader>
+          <CardContent className="flex-1 p-6 pt-0 flex items-center justify-center">
+            <CategoryPieChart data={categoryTotals} />
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader className="space-y-1">
             <CardTitle>Total gasto</CardTitle>
@@ -931,6 +950,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
             <p className="text-3xl font-semibold">{formatCurrency(totalAmount)}</p>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="space-y-1">
             <CardTitle>{`Total gasto em ${monthLabel}`}</CardTitle>
@@ -943,15 +963,6 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                 ? "1 lançamento no mês"
                 : `${currentMonthStats.count} lançamentos no mês`}
             </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="space-y-1">
-            <CardTitle>Total por categoria</CardTitle>
-            <p className="text-sm text-muted-foreground">Inclui lançamentos sem categoria</p>
-          </CardHeader>
-          <CardContent className="p-6 pt-0">
-            <CategoryPieChart data={categoryTotals} />
           </CardContent>
         </Card>
       </section>
