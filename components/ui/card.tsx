@@ -30,6 +30,15 @@ export const CardTitle = forwardRef<HTMLHeadingElement, HTMLAttributes<HTMLHeadi
 
 CardTitle.displayName = "CardTitle"
 
+export const CardDescription = forwardRef<HTMLParagraphElement, HTMLAttributes<HTMLParagraphElement>>(
+  (props, ref) => {
+    const { className, ...rest } = props
+    return <p ref={ref} className={cn("text-sm text-muted-foreground", className)} {...rest} />
+  }
+)
+
+CardDescription.displayName = "CardDescription"
+
 export const CardContent = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>((props, ref) => {
   const { className, ...rest } = props
   return <div ref={ref} className={cn("p-6 pt-0", className)} {...rest} />

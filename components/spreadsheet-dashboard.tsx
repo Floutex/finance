@@ -29,9 +29,14 @@ import {
   X
 } from "lucide-react"
 
+import { simplifyDebts, type Debt } from "@/lib/debt-simplification"
+import { Checkbox } from "@/components/ui/checkbox"
+
 type Transaction = Tables<"shared_transactions">
 type TransactionInsert = TablesInsert<"shared_transactions">
 type TransactionUpdate = TablesUpdate<"shared_transactions">
+
+const PARTICIPANTS = ["Antônio", "Júlia", "Simões", "Pietro"]
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value)
@@ -44,7 +49,7 @@ const toISODate = (value: string) => {
   }
 }
 
-type SortField = "date" | "description" | "amount" | "amount_owed" | "paid_by" | "category" | "created_at"
+type SortField = "date" | "description" | "amount" | "participants" | "paid_by" | "category" | "created_at"
 
 type FormState = {
   description: string
@@ -52,14 +57,14 @@ type FormState = {
   paid_by: string
   date: string
   amount: string
-  amount_owed: string
+  participants: string[]
 }
 
 type ExtractedTransaction = {
   description: string
   date: string
   amount: number
-  amount_owed: number
+  participants: string[]
   paid_by: string
   category: string
 }
@@ -72,7 +77,7 @@ const initialFormState = (): FormState => {
     paid_by: "",
     date: today,
     amount: "",
-    amount_owed: ""
+    participants: PARTICIPANTS,
   }
 }
 
@@ -88,7 +93,7 @@ const normalizeText = (value: string | null) => value?.trim() || ""
 
 const capitalize = (value: string) => value.charAt(0).toUpperCase() + value.slice(1)
 
-export const SpreadsheetDashboard = () => {
+export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) => {
   const supabase = getSupabaseClient()
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
@@ -99,7 +104,7 @@ export const SpreadsheetDashboard = () => {
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc")
   const [createForm, setCreateForm] = useState<FormState>(initialFormState)
-  const [createOnlyBalance, setCreateOnlyBalance] = useState(false)
+  // const [createOnlyBalance, setCreateOnlyBalance] = useState(false) // Deprecated
   const [createPending, setCreatePending] = useState(false)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
@@ -209,10 +214,18 @@ export const SpreadsheetDashboard = () => {
   }, [uploadDialogOpen])
 
   const filteredTransactions = useMemo(() => {
+    // First filter by user involvement (paid or participated)
+    const userTransactions = transactions.filter(t => {
+      const isPayer = t.paid_by === currentUser
+      const isParticipant = (t.participants ?? []).includes(currentUser)
+      return isPayer || isParticipant
+    })
+
+    // Then apply search and date filters
     const searchValue = search.trim().toLowerCase()
     const start = startDate ? parseISO(startDate) : null
     const end = endDate ? parseISO(endDate) : null
-    return transactions.filter(transaction => {
+    return userTransactions.filter(transaction => {
       const matchesSearch =
         !searchValue ||
         normalizeText(transaction.description).toLowerCase().includes(searchValue) ||
@@ -226,13 +239,13 @@ export const SpreadsheetDashboard = () => {
       const beforeEnd = end ? transactionDate <= end : true
       return afterStart && beforeEnd
     })
-  }, [transactions, search, startDate, endDate])
+  }, [transactions, currentUser, search, startDate, endDate])
 
   const sortedTransactions = useMemo(() => {
     const copy = [...filteredTransactions]
     copy.sort((a, b) => {
       const direction = sortDirection === "asc" ? 1 : -1
-      if (sortField === "amount" || sortField === "amount_owed") {
+      if (sortField === "amount") {
         const first = (a[sortField] ?? 0) as number
         const second = (b[sortField] ?? 0) as number
         return (first - second) * direction
@@ -242,8 +255,18 @@ export const SpreadsheetDashboard = () => {
         const second = parseISO(b[sortField])
         return (first.getTime() - second.getTime()) * direction
       }
-      const first = normalizeText(a[sortField]).toLowerCase()
-      const second = normalizeText(b[sortField]).toLowerCase()
+      if (sortField === "participants") {
+        const first = a.participants ?? []
+        const second = b.participants ?? []
+        const firstStr = first.sort().join(", ").toLowerCase()
+        const secondStr = second.sort().join(", ").toLowerCase()
+        if (firstStr < secondStr) return -1 * direction
+        if (firstStr > secondStr) return 1 * direction
+        return 0
+      }
+
+      const first = normalizeText(a[sortField as "description" | "category" | "paid_by"]).toLowerCase()
+      const second = normalizeText(b[sortField as "description" | "category" | "paid_by"]).toLowerCase()
       if (first < second) {
         return -1 * direction
       }
@@ -260,42 +283,19 @@ export const SpreadsheetDashboard = () => {
   }, [search, startDate, endDate])
 
   const createAmountValue = useMemo(() => {
-    if (createOnlyBalance) {
-      const owed = normalizeNumber(createForm.amount_owed)
-      return owed !== null ? Math.abs(owed) : null
-    }
     return normalizeNumber(createForm.amount)
-  }, [createForm.amount, createOnlyBalance, createForm.amount_owed])
+  }, [createForm.amount])
 
-  const createAmountOwedValue = useMemo(() => {
-    if (!createOnlyBalance && createForm.amount.trim() && createForm.paid_by) {
-      const amount = normalizeNumber(createForm.amount)
-      if (amount !== null) {
-        return createForm.paid_by === "Júlia" ? -amount / 2 : amount / 2
-      }
-    }
-    const val = normalizeNumber(createForm.amount_owed)
-    if (createOnlyBalance && val !== null && createForm.paid_by) {
-      return createForm.paid_by === "Júlia" ? -Math.abs(val) : Math.abs(val)
-    }
-    return val
-  }, [createForm.amount, createForm.paid_by, createForm.amount_owed, createOnlyBalance])
-  const createAmountInvalid = !createOnlyBalance && createForm.amount.trim().length > 0 && createAmountValue === null
-  const createAmountOwedInvalid = false
+  const createAmountInvalid = createForm.amount.trim().length > 0 && createAmountValue === null
 
   const isCreateFormValid = useMemo(() => {
     const descriptionValid = createForm.description.trim().length > 0
-    const paidByValid = createForm.paid_by === "Antônio" || createForm.paid_by === "Júlia"
+    const paidByValid = PARTICIPANTS.includes(createForm.paid_by)
     const dateValid = createForm.date.length > 0
-    const amountValid = !createAmountInvalid && createAmountValue !== null
-    return descriptionValid && paidByValid && dateValid && amountValid
-  }, [
-    createAmountInvalid,
-    createAmountValue,
-    createForm.date,
-    createForm.description,
-    createForm.paid_by
-  ])
+    const amountValid = normalizeNumber(createForm.amount) !== null
+    const participantsValid = createForm.participants.length > 0
+    return descriptionValid && paidByValid && dateValid && amountValid && participantsValid
+  }, [createForm])
 
   useEffect(() => {
     setSelectedRows(previous => previous.filter(id => sortedTransactions.some(transaction => transaction.id === id)))
@@ -414,12 +414,16 @@ export const SpreadsheetDashboard = () => {
     })
   }, [sortedTransactions])
 
-  const juliaMessage =
-    netBalance > 0
-      ? `Júlia me deve ${formatCurrency(netBalance)}`
-      : netBalance < 0
-        ? `Eu devo ${formatCurrency(Math.abs(netBalance))} para a Júlia`
-        : "Estamos quites por enquanto"
+  const simplifiedDebts = useMemo(() => {
+    const allTransactions = transactions.map(t => ({
+      paid_by: t.paid_by,
+      amount: t.amount ?? 0,
+      participants: t.participants ?? ["Antônio", "Júlia"] // Default for legacy
+    }))
+    return simplifyDebts(allTransactions)
+  }, [transactions])
+
+  const myDebts = simplifiedDebts.filter(d => d.from === currentUser || d.to === currentUser)
 
   const [localCategories, setLocalCategories] = useState<string[]>([])
 
@@ -472,18 +476,23 @@ export const SpreadsheetDashboard = () => {
     event.preventDefault()
     setCreatePending(true)
     setError(null)
-    if (createAmountOwedValue === null) {
+
+    const isParticipant = createForm.participants.includes(currentUser)
+    const isPayer = createForm.paid_by === currentUser
+
+    if (!isParticipant && !isPayer) {
+      setError("Você não pode criar uma transação na qual não está envolvido (pagando ou participando).")
       setCreatePending(false)
-      setError("Informe um saldo válido.")
       return
     }
+
     const payload: TransactionInsert = {
       description: createForm.description.trim(),
       category: createForm.category.trim() || null,
       paid_by: createForm.paid_by.trim(),
       date: createForm.date,
       amount: createAmountValue,
-      amount_owed: createAmountOwedValue
+      participants: createForm.participants
     }
     const { data, error: insertError } = await supabase
       .from("shared_transactions")
@@ -494,9 +503,7 @@ export const SpreadsheetDashboard = () => {
       setError(insertError.message)
     } else if (data) {
       setTransactions(previous => [data, ...previous])
-      setTransactions(previous => [data, ...previous])
       setCreateForm(initialFormState())
-      setCreateOnlyBalance(false)
       setCreateDialogOpen(false)
     }
     setCreatePending(false)
@@ -504,7 +511,6 @@ export const SpreadsheetDashboard = () => {
 
   const handleOpenCreateDialog = () => {
     setCreateForm(initialFormState())
-    setCreateOnlyBalance(false)
     setError(null)
     setCreateDialogOpen(true)
   }
@@ -516,7 +522,6 @@ export const SpreadsheetDashboard = () => {
     setCreateDialogOpen(false)
     setError(null)
     setCreateForm(initialFormState())
-    setCreateOnlyBalance(false)
     requestAnimationFrame(() => {
       createButtonRef.current?.focus()
     })
@@ -537,7 +542,7 @@ export const SpreadsheetDashboard = () => {
       paid_by: transaction.paid_by,
       date: toISODate(transaction.date),
       amount: transaction.amount !== null ? String(transaction.amount) : "",
-      amount_owed: transaction.amount_owed !== null ? String(transaction.amount_owed) : ""
+      participants: transaction.participants ?? PARTICIPANTS
     })
   }
 
@@ -549,15 +554,23 @@ export const SpreadsheetDashboard = () => {
   const handleSaveEdit = async (transactionId: string) => {
     setEditPending(true)
     setError(null)
+
+    const isParticipant = editForm.participants.includes(currentUser)
+    const isPayer = editForm.paid_by === currentUser
+
+    if (!isParticipant && !isPayer) {
+      setError("Você não pode editar uma transação para não estar mais envolvido nela.")
+      setEditPending(false)
+      return
+    }
     const amountValue = normalizeNumber(editForm.amount)
-    const amountOwedValue = normalizeNumber(editForm.amount_owed)
     const updatePayload: TransactionUpdate = {
       description: editForm.description.trim(),
       category: editForm.category.trim() || null,
       paid_by: editForm.paid_by.trim(),
       date: editForm.date,
       amount: amountValue,
-      amount_owed: amountOwedValue
+      participants: editForm.participants
     }
     const { data, error: updateError } = await supabase
       .from("shared_transactions")
@@ -583,30 +596,12 @@ export const SpreadsheetDashboard = () => {
 
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = event.target
-    setCreateForm(previous => {
-      const updated = { ...previous, [name]: value }
-      if (!createOnlyBalance && (name === "amount" || name === "paid_by")) {
-        const amount = normalizeNumber(updated.amount)
-        if (amount !== null && (updated.paid_by === "Antônio" || updated.paid_by === "Júlia")) {
-          updated.amount_owed = String(updated.paid_by === "Júlia" ? -amount / 2 : amount / 2)
-        }
-      }
-      return updated
-    })
+    setCreateForm(previous => ({ ...previous, [name]: value }))
   }
 
   const handlePaidByChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     const value = event.target.value
-    setCreateForm(previous => {
-      const updated = { ...previous, paid_by: value }
-      if (!createOnlyBalance) {
-        const amount = normalizeNumber(updated.amount)
-        if (amount !== null && (value === "Antônio" || value === "Júlia")) {
-          updated.amount_owed = String(value === "Júlia" ? -amount / 2 : amount / 2)
-        }
-      }
-      return updated
-    })
+    setCreateForm(previous => ({ ...previous, paid_by: value }))
   }
 
   const handleEditInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -673,7 +668,7 @@ export const SpreadsheetDashboard = () => {
         description: t.description,
         date: t.date,
         amount: t.amount,
-        amount_owed: 0,
+        participants: PARTICIPANTS,
         paid_by: "",
         category: ""
       }))
@@ -689,19 +684,7 @@ export const SpreadsheetDashboard = () => {
     setExtractedTransactions(previous =>
       previous.map((t, i) => {
         if (i === index) {
-          const updated = { ...t, [field]: value }
-          if (field === "amount" || field === "paid_by") {
-            const amount = field === "amount" ? (value as number) : updated.amount
-            const paidBy = field === "paid_by" ? (value as string) : updated.paid_by
-            if (paidBy === "Júlia") {
-              updated.amount_owed = -amount / 2
-            } else if (paidBy === "Antônio") {
-              updated.amount_owed = amount / 2
-            } else {
-              updated.amount_owed = amount / 2
-            }
-          }
-          return updated
+          return { ...t, [field]: value }
         }
         return t
       })
@@ -710,12 +693,24 @@ export const SpreadsheetDashboard = () => {
 
   const handleSaveExtractedTransactions = async () => {
     const invalidTransactions = extractedTransactions.filter(
-      t => !t.description.trim() || (t.paid_by !== "Antônio" && t.paid_by !== "Júlia") || !t.date
+      t => !t.description.trim() || !PARTICIPANTS.includes(t.paid_by) || !t.date
     )
     if (invalidTransactions.length > 0) {
       setError("Preencha todos os campos obrigatórios (descrição, data e pago por) em todas as transações")
       return
     }
+
+    const uninvolvedTransactions = extractedTransactions.filter(t => {
+      const isPayer = t.paid_by === currentUser
+      const isParticipant = t.participants.includes(currentUser)
+      return !isPayer && !isParticipant
+    })
+
+    if (uninvolvedTransactions.length > 0) {
+      setError("Você não pode salvar transações nas quais não está envolvido (pagando ou participando).")
+      return
+    }
+
     setSavePending(true)
     setError(null)
     try {
@@ -725,7 +720,7 @@ export const SpreadsheetDashboard = () => {
         paid_by: t.paid_by.trim(),
         date: t.date,
         amount: t.amount,
-        amount_owed: t.amount_owed
+        participants: t.participants
       }))
       const { data, error: insertError } = await supabase
         .from("shared_transactions")
@@ -874,7 +869,7 @@ export const SpreadsheetDashboard = () => {
     { key: "date", label: "Data" },
     { key: "paid_by", label: "Pago por", labelClassName: "whitespace-nowrap" },
     { key: "amount", label: "Valor total", align: "right", labelClassName: "whitespace-nowrap" },
-    { key: "amount_owed", label: "Saldo", align: "right" }
+    { key: "participants", label: "Participantes", align: "right" }
   ]
 
   return (
@@ -887,28 +882,29 @@ export const SpreadsheetDashboard = () => {
       <section className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="space-y-1">
-            <CardTitle>Saldo líquido</CardTitle>
-            <p className="text-sm text-muted-foreground">Situação geral</p>
+            <CardTitle>Suas dívidas simplificadas</CardTitle>
+            <p className="text-sm text-muted-foreground">Quem deve para quem</p>
           </CardHeader>
           <CardContent className="space-y-2">
-            <p className="text-3xl font-semibold">{formatCurrency(netBalance)}</p>
-            <p className={cn("text-sm", netBalance === 0 ? "text-muted-foreground" : "text-primary")}>
-              {juliaMessage}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="space-y-1">
-            <CardTitle>{`Saldo em ${monthLabel}`}</CardTitle>
-            <p className="text-sm text-muted-foreground">Movimentação mensal</p>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <p className="text-3xl font-semibold">{formatCurrency(currentMonthStats.total)}</p>
-            <p className="text-sm text-muted-foreground">
-              {currentMonthStats.count === 1
-                ? "1 lançamento no mês"
-                : `${currentMonthStats.count} lançamentos no mês`}
-            </p>
+            {myDebts.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Você está quites com todos!</p>
+            ) : (
+              <div className="space-y-2">
+                {myDebts.map((debt, index) => (
+                  <div key={index} className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2">
+                    {debt.from === currentUser ? (
+                      <p className="text-sm">
+                        Você deve <span className="font-semibold text-destructive">{formatCurrency(debt.amount)}</span> para <span className="font-semibold">{debt.to}</span>
+                      </p>
+                    ) : (
+                      <p className="text-sm">
+                        <span className="font-semibold">{debt.from}</span> deve <span className="font-semibold text-green-600">{formatCurrency(debt.amount)}</span> para você
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -1045,6 +1041,8 @@ export const SpreadsheetDashboard = () => {
                     <option value="">Selecione...</option>
                     <option value="Antônio">Antônio</option>
                     <option value="Júlia">Júlia</option>
+                    <option value="Simões">Simões</option>
+                    <option value="Pietro">Pietro</option>
                   </Select>
                 </div>
                 <div className="space-y-2">
@@ -1069,48 +1067,37 @@ export const SpreadsheetDashboard = () => {
                     value={createForm.amount}
                     onChange={handleInputChange}
                     aria-invalid={createAmountInvalid}
-                    disabled={createOnlyBalance}
-                    className={createOnlyBalance ? "bg-muted" : ""}
                   />
                 </div>
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="amount_owed">Saldo</Label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        id="onlyBalance"
-                        checked={createOnlyBalance}
-                        onChange={e => {
-                          setCreateOnlyBalance(e.target.checked)
-                          if (e.target.checked) {
-                            setCreateForm(prev => ({ ...prev, amount: "" }))
-                          }
-                        }}
-                        className="h-4 w-4 rounded border-primary text-primary focus:ring-primary"
-                      />
-                      <Label htmlFor="onlyBalance" className="text-xs font-normal cursor-pointer">
-                        Informar apenas saldo
-                      </Label>
-                    </div>
+                  <Label>Participantes</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {PARTICIPANTS.map(participant => (
+                      <div key={participant} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`participant-${participant}`}
+                          checked={createForm.participants.includes(participant)}
+                          onChange={(e) => {
+                            const checked = e.target.checked
+                            setCreateForm(prev => {
+                              const current = prev.participants
+                              if (checked) {
+                                return { ...prev, participants: [...current, participant] }
+                              } else {
+                                return { ...prev, participants: current.filter(p => p !== participant) }
+                              }
+                            })
+                          }}
+                        />
+                        <Label htmlFor={`participant-${participant}`} className="text-sm font-normal cursor-pointer">
+                          {participant}
+                        </Label>
+                      </div>
+                    ))}
                   </div>
-                  <Input
-                    id="amount_owed"
-                    name="amount_owed"
-                    autoComplete="off"
-                    inputMode="decimal"
-                    placeholder="0,00"
-                    value={createForm.amount_owed}
-                    onChange={handleInputChange}
-                    readOnly={!createOnlyBalance}
-                    className={!createOnlyBalance ? "bg-muted" : ""}
-                    aria-invalid={createAmountOwedInvalid}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {createOnlyBalance
-                      ? "Informe o valor do saldo (será considerado o total)"
-                      : "Calculado automaticamente: metade do valor total"}
-                  </p>
+                  {createForm.participants.length === 0 && (
+                    <p className="text-xs text-destructive">Selecione pelo menos um participante</p>
+                  )}
                 </div>
                 <div className="md:col-span-2 flex justify-end">
                   <Button type="submit" disabled={createPending || !isCreateFormValid} aria-busy={createPending}>
@@ -1135,383 +1122,388 @@ export const SpreadsheetDashboard = () => {
               )}
             </div>
           </div>
-        </div>
+        </div >
       )}
 
-      {uploadDialogOpen && (
-        <div className="fixed inset-0 z-50">
-          <div
-            className="absolute inset-0 bg-background/80 backdrop-blur-sm"
-            onClick={handleCloseUploadDialog}
-            aria-hidden="true"
-          />
-          <div className="relative flex h-full items-center justify-center p-4" onKeyDown={handleUploadDialogKeyDown}>
+      {
+        uploadDialogOpen && (
+          <div className="fixed inset-0 z-50">
             <div
-              className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-lg border border-border bg-card p-6 shadow-lg outline-none"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="upload-dialog-title"
-              aria-describedby="upload-dialog-description"
-            >
-              <div className="flex items-center justify-between">
-                <p id="upload-dialog-title" className="text-lg font-semibold">
-                  Adicionar transações por imagem
+              className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+              onClick={handleCloseUploadDialog}
+              aria-hidden="true"
+            />
+            <div className="relative flex h-full items-center justify-center p-4" onKeyDown={handleUploadDialogKeyDown}>
+              <div
+                className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-lg border border-border bg-card p-6 shadow-lg outline-none"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="upload-dialog-title"
+                aria-describedby="upload-dialog-description"
+              >
+                <div className="flex items-center justify-between">
+                  <p id="upload-dialog-title" className="text-lg font-semibold">
+                    Adicionar transações por imagem
+                  </p>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleCloseUploadDialog}
+                    disabled={analyzing || savePending}
+                    aria-label="Fechar formulário de upload"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+                <p id="upload-dialog-description" className="mt-2 text-sm text-muted-foreground">
+                  Faça upload de uma imagem contendo transações ou cole uma imagem (Ctrl+V). O sistema irá extrair automaticamente as informações.
                 </p>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleCloseUploadDialog}
-                  disabled={analyzing || savePending}
-                  aria-label="Fechar formulário de upload"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-              <p id="upload-dialog-description" className="mt-2 text-sm text-muted-foreground">
-                Faça upload de uma imagem contendo transações ou cole uma imagem (Ctrl+V). O sistema irá extrair automaticamente as informações.
-              </p>
 
-              <div className="mt-6 space-y-6">
-                {!uploadedImage ? (
-                  <div className="space-y-2">
-                    <Label htmlFor="image-upload">Selecionar imagem ou colar (Ctrl+V)</Label>
-                    <Input
-                      id="image-upload"
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImageUpload}
-                      className="cursor-pointer"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Você também pode colar uma imagem usando Ctrl+V quando este dialog estiver aberto
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
+                <div className="mt-6 space-y-6">
+                  {!uploadedImage ? (
                     <div className="space-y-2">
-                      <Label>Imagem selecionada</Label>
-                      <div className="relative">
-                        <img
-                          src={uploadedImage}
-                          alt="Preview"
-                          className="max-h-64 w-full rounded-md border border-border object-contain"
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            setUploadedImage(null)
-                            setUploadedFile(null)
-                            setExtractedTransactions([])
-                          }}
-                          className="absolute right-2 top-2"
-                          aria-label="Remover imagem"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                    {extractedTransactions.length === 0 && (
-                      <Button
-                        type="button"
-                        onClick={handleAnalyzeImage}
-                        disabled={analyzing}
-                        className="w-full"
-                      >
-                        {analyzing ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Analisando imagem...
-                          </>
-                        ) : (
-                          <>
-                            <ImageIcon className="mr-2 h-4 w-4" />
-                            Analisar imagem
-                          </>
-                        )}
-                      </Button>
-                    )}
-                  </div>
-                )}
-
-                {extractedTransactions.length > 0 && (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-medium">
-                        {extractedTransactions.length === 1
-                          ? "1 transação extraída"
-                          : `${extractedTransactions.length} transações extraídas`}
+                      <Label htmlFor="image-upload">Selecionar imagem ou colar (Ctrl+V)</Label>
+                      <Input
+                        id="image-upload"
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageUpload}
+                        className="cursor-pointer"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Você também pode colar uma imagem usando Ctrl+V quando este dialog estiver aberto
                       </p>
                     </div>
-                    <div className="space-y-4 max-h-96 overflow-y-auto">
-                      {extractedTransactions.map((transaction, index) => (
-                        <div key={index} className="rounded-lg border border-border p-4 space-y-3">
-                          <div className="grid gap-3 md:grid-cols-2">
-                            <div className="space-y-2">
-                              <Label htmlFor={`desc-${index}`}>Descrição</Label>
-                              <Input
-                                id={`desc-${index}`}
-                                value={transaction.description}
-                                onChange={e =>
-                                  handleUpdateExtractedTransaction(index, "description", e.target.value)
-                                }
-                                required
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor={`date-${index}`}>Data</Label>
-                              <Input
-                                id={`date-${index}`}
-                                type="date"
-                                value={transaction.date}
-                                onChange={e => handleUpdateExtractedTransaction(index, "date", e.target.value)}
-                                required
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor={`amount-${index}`}>Valor total</Label>
-                              <Input
-                                id={`amount-${index}`}
-                                type="number"
-                                step="0.01"
-                                value={transaction.amount}
-                                onChange={e =>
-                                  handleUpdateExtractedTransaction(index, "amount", parseFloat(e.target.value) || 0)
-                                }
-                                required
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor={`paid_by-${index}`}>Pago por</Label>
-                              <Select
-                                id={`paid_by-${index}`}
-                                value={transaction.paid_by}
-                                onChange={e => handleUpdateExtractedTransaction(index, "paid_by", e.target.value)}
-                                required
-                              >
-                                <option value="">Selecione...</option>
-                                <option value="Antônio">Antônio</option>
-                                <option value="Júlia">Júlia</option>
-                              </Select>
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor={`amount_owed-${index}`}>Valor devido</Label>
-                              <Input
-                                id={`amount_owed-${index}`}
-                                type="number"
-                                step="0.01"
-                                value={transaction.amount_owed}
-                                readOnly
-                                className="bg-muted"
-                                required
-                              />
-                              <p className="text-xs text-muted-foreground">
-                                Calculado automaticamente
-                              </p>
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor={`category-${index}`}>Categoria</Label>
-                              <div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label>Imagem selecionada</Label>
+                        <div className="relative">
+                          <img
+                            src={uploadedImage}
+                            alt="Preview"
+                            className="max-h-64 w-full rounded-md border border-border object-contain"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              setUploadedImage(null)
+                              setUploadedFile(null)
+                              setExtractedTransactions([])
+                            }}
+                            className="absolute right-2 top-2"
+                            aria-label="Remover imagem"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      {extractedTransactions.length === 0 && (
+                        <Button
+                          type="button"
+                          onClick={handleAnalyzeImage}
+                          disabled={analyzing}
+                          className="w-full"
+                        >
+                          {analyzing ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Analisando imagem...
+                            </>
+                          ) : (
+                            <>
+                              <ImageIcon className="mr-2 h-4 w-4" />
+                              Analisar imagem
+                            </>
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                  )}
+
+                  {extractedTransactions.length > 0 && (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium">
+                          {extractedTransactions.length === 1
+                            ? "1 transação extraída"
+                            : `${extractedTransactions.length} transações extraídas`}
+                        </p>
+                      </div>
+                      <div className="space-y-4 max-h-96 overflow-y-auto">
+                        {extractedTransactions.map((transaction, index) => (
+                          <div key={index} className="rounded-lg border border-border p-4 space-y-3">
+                            <div className="grid gap-3 md:grid-cols-2">
+                              <div className="space-y-2">
+                                <Label htmlFor={`desc-${index}`}>Descrição</Label>
                                 <Input
-                                  id={`category-${index}`}
-                                  list="categories-list"
-                                  value={transaction.category}
-                                  onChange={e => handleUpdateExtractedTransaction(index, "category", e.target.value)}
+                                  id={`desc-${index}`}
+                                  value={transaction.description}
+                                  onChange={e =>
+                                    handleUpdateExtractedTransaction(index, "description", e.target.value)
+                                  }
+                                  required
                                 />
-                                {transaction.category.trim() &&
-                                  !categoriesOptions.includes(transaction.category.trim()) && (
-                                    <div className="pt-1">
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => handleAddCategoryOption(transaction.category)}
-                                      >
-                                        Adicionar "{transaction.category.trim()}"
-                                      </Button>
-                                    </div>
-                                  )}
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor={`date-${index}`}>Data</Label>
+                                <Input
+                                  id={`date-${index}`}
+                                  type="date"
+                                  value={transaction.date}
+                                  onChange={e => handleUpdateExtractedTransaction(index, "date", e.target.value)}
+                                  required
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor={`amount-${index}`}>Valor total</Label>
+                                <Input
+                                  id={`amount-${index}`}
+                                  type="number"
+                                  step="0.01"
+                                  value={transaction.amount}
+                                  onChange={e =>
+                                    handleUpdateExtractedTransaction(index, "amount", parseFloat(e.target.value) || 0)
+                                  }
+                                  required
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor={`paid_by-${index}`}>Pago por</Label>
+                                <Select
+                                  id={`paid_by-${index}`}
+                                  value={transaction.paid_by}
+                                  onChange={e => handleUpdateExtractedTransaction(index, "paid_by", e.target.value)}
+                                  required
+                                >
+                                  <option value="">Selecione...</option>
+                                  <option value="Antônio">Antônio</option>
+                                  <option value="Júlia">Júlia</option>
+                                  <option value="Simões">Simões</option>
+                                  <option value="Pietro">Pietro</option>
+                                </Select>
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Participantes</Label>
+                                <div className="text-xs text-muted-foreground">
+                                  {transaction.participants.join(", ")}
+                                </div>
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor={`category-${index}`}>Categoria</Label>
+                                <div>
+                                  <Input
+                                    id={`category-${index}`}
+                                    list="categories-list"
+                                    value={transaction.category}
+                                    onChange={e => handleUpdateExtractedTransaction(index, "category", e.target.value)}
+                                  />
+                                  {transaction.category.trim() &&
+                                    !categoriesOptions.includes(transaction.category.trim()) && (
+                                      <div className="pt-1">
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => handleAddCategoryOption(transaction.category)}
+                                        >
+                                          Adicionar "{transaction.category.trim()}"
+                                        </Button>
+                                      </div>
+                                    )}
+                                </div>
                               </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={handleCloseUploadDialog}
+                          disabled={savePending}
+                        >
+                          Cancelar
+                        </Button>
+                        <Button type="button" onClick={handleSaveExtractedTransactions} disabled={savePending}>
+                          {savePending ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Salvando...
+                            </>
+                          ) : (
+                            <>
+                              <Save className="mr-2 h-4 w-4" />
+                              Salvar todas as transações
+                            </>
+                          )}
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={handleCloseUploadDialog}
-                        disabled={savePending}
-                      >
-                        Cancelar
-                      </Button>
-                      <Button type="button" onClick={handleSaveExtractedTransactions} disabled={savePending}>
-                        {savePending ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Salvando...
-                          </>
-                        ) : (
-                          <>
-                            <Save className="mr-2 h-4 w-4" />
-                            Salvar todas as transações
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </div>
+                  )}
+                </div>
+                {error && (
+                  <p className="mt-4 text-sm text-destructive" role="alert">
+                    {error}
+                  </p>
                 )}
               </div>
-              {error && (
-                <p className="mt-4 text-sm text-destructive" role="alert">
-                  {error}
-                </p>
-              )}
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
-      {bulkDeleteOpen && (
-        <div className="fixed inset-0 z-50">
-          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={() => setBulkDeleteOpen(false)} aria-hidden="true" />
-          <div className="relative flex h-full items-center justify-center p-4">
-            <div className="w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-lg outline-none" role="dialog" aria-modal="true" aria-labelledby="bulk-delete-title">
-              <div className="flex items-center justify-between">
-                <p id="bulk-delete-title" className="text-lg font-semibold">Excluir transações selecionadas</p>
-                <Button type="button" variant="ghost" size="icon" onClick={() => setBulkDeleteOpen(false)} disabled={bulkPending} aria-label="Fechar" className="h-8 w-8">
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-              <p className="mt-2 text-sm text-muted-foreground">
-                {selectedRows.length === 1 ? "Deseja excluir 1 transação?" : `Deseja excluir ${selectedRows.length} transações?`}
-              </p>
-              <div className="mt-6 flex justify-end gap-2">
-                <Button type="button" variant="outline" onClick={() => setBulkDeleteOpen(false)} disabled={bulkPending}>Cancelar</Button>
-                <Button type="button" onClick={handleConfirmBulkDelete} disabled={bulkPending}>
-                  {bulkPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Excluindo...</> : <><Trash2 className="mr-2 h-4 w-4" />Excluir</>}
-                </Button>
-              </div>
-              {bulkError && <p className="mt-4 text-sm text-destructive" role="alert">{bulkError}</p>}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {bulkQuickEditOpen && (
-        <div className="fixed inset-0 z-50">
-          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={() => setBulkQuickEditOpen(false)} aria-hidden="true" />
-          <div className="relative flex h-full items-center justify-center p-4">
-            <div className="w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-lg outline-none" role="dialog" aria-modal="true" aria-labelledby="bulk-quick-title">
-              <div className="flex items-center justify-between">
-                <p id="bulk-quick-title" className="text-lg font-semibold">Edição rápida</p>
-                <Button type="button" variant="ghost" size="icon" onClick={() => setBulkQuickEditOpen(false)} disabled={bulkPending} aria-label="Fechar" className="h-8 w-8">
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-              <div className="mt-6 space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="quick-field">Campo</Label>
-                  <Select id="quick-field" value={quickField} onChange={e => setQuickField(e.target.value as any)}>
-                    <option value="category">Categoria</option>
-                    <option value="paid_by">Pago por</option>
-                  </Select>
+      {
+        bulkDeleteOpen && (
+          <div className="fixed inset-0 z-50">
+            <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={() => setBulkDeleteOpen(false)} aria-hidden="true" />
+            <div className="relative flex h-full items-center justify-center p-4">
+              <div className="w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-lg outline-none" role="dialog" aria-modal="true" aria-labelledby="bulk-delete-title">
+                <div className="flex items-center justify-between">
+                  <p id="bulk-delete-title" className="text-lg font-semibold">Excluir transações selecionadas</p>
+                  <Button type="button" variant="ghost" size="icon" onClick={() => setBulkDeleteOpen(false)} disabled={bulkPending} aria-label="Fechar" className="h-8 w-8">
+                    <X className="h-4 w-4" />
+                  </Button>
                 </div>
-                {quickField === "category" ? (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {selectedRows.length === 1 ? "Deseja excluir 1 transação?" : `Deseja excluir ${selectedRows.length} transações?`}
+                </p>
+                <div className="mt-6 flex justify-end gap-2">
+                  <Button type="button" variant="outline" onClick={() => setBulkDeleteOpen(false)} disabled={bulkPending}>Cancelar</Button>
+                  <Button type="button" onClick={handleConfirmBulkDelete} disabled={bulkPending}>
+                    {bulkPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Excluindo...</> : <><Trash2 className="mr-2 h-4 w-4" />Excluir</>}
+                  </Button>
+                </div>
+                {bulkError && <p className="mt-4 text-sm text-destructive" role="alert">{bulkError}</p>}
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+      {
+        bulkQuickEditOpen && (
+          <div className="fixed inset-0 z-50">
+            <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={() => setBulkQuickEditOpen(false)} aria-hidden="true" />
+            <div className="relative flex h-full items-center justify-center p-4">
+              <div className="w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-lg outline-none" role="dialog" aria-modal="true" aria-labelledby="bulk-quick-title">
+                <div className="flex items-center justify-between">
+                  <p id="bulk-quick-title" className="text-lg font-semibold">Edição rápida</p>
+                  <Button type="button" variant="ghost" size="icon" onClick={() => setBulkQuickEditOpen(false)} disabled={bulkPending} aria-label="Fechar" className="h-8 w-8">
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="mt-6 space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="quick-value">Novo valor</Label>
-                    <Input id="quick-value" value={quickValue} onChange={e => setQuickValue(e.target.value)} list="categories-list" />
-                    {quickValue.trim() && !categoriesOptions.includes(quickValue.trim()) && (
+                    <Label htmlFor="quick-field">Campo</Label>
+                    <Select id="quick-field" value={quickField} onChange={e => setQuickField(e.target.value as any)}>
+                      <option value="category">Categoria</option>
+                      <option value="paid_by">Pago por</option>
+                    </Select>
+                  </div>
+                  {quickField === "category" ? (
+                    <div className="space-y-2">
+                      <Label htmlFor="quick-value">Novo valor</Label>
+                      <Input id="quick-value" value={quickValue} onChange={e => setQuickValue(e.target.value)} list="categories-list" />
+                      {quickValue.trim() && !categoriesOptions.includes(quickValue.trim()) && (
+                        <div className="pt-1">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleAddCategoryOption(quickValue)}
+                          >
+                            Adicionar "{quickValue.trim()}"
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Label htmlFor="quick-paid-by">Pago por</Label>
+                      <Select id="quick-paid-by" value={quickValue} onChange={e => setQuickValue(e.target.value)}>
+                        <option value="">Selecione...</option>
+                        <option value="Antônio">Antônio</option>
+                        <option value="Júlia">Júlia</option>
+                        <option value="Simões">Simões</option>
+                        <option value="Pietro">Pietro</option>
+                      </Select>
+                    </div>
+                  )}
+                </div>
+                <div className="mt-6 flex justify-end gap-2">
+                  <Button type="button" variant="outline" onClick={() => setBulkQuickEditOpen(false)} disabled={bulkPending}>Cancelar</Button>
+                  <Button type="button" onClick={handleConfirmQuickEdit} disabled={bulkPending || (quickField === "paid_by" && !quickValue)}>
+                    {bulkPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Salvando...</> : <><Save className="mr-2 h-4 w-4" />Aplicar</>}
+                  </Button>
+                </div>
+                {bulkError && <p className="mt-4 text-sm text-destructive" role="alert">{bulkError}</p>}
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+      {
+        bulkAdvancedEditOpen && (
+          <div className="fixed inset-0 z-50">
+            <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={() => setBulkAdvancedEditOpen(false)} aria-hidden="true" />
+            <div className="relative flex h-full items-center justify-center p-4">
+              <div className="w-full max-w-lg rounded-lg border border-border bg-card p-6 shadow-lg outline-none" role="dialog" aria-modal="true" aria-labelledby="bulk-adv-title">
+                <div className="flex items-center justify-between">
+                  <p id="bulk-adv-title" className="text-lg font-semibold">Edição avançada</p>
+                  <Button type="button" variant="ghost" size="icon" onClick={() => setBulkAdvancedEditOpen(false)} disabled={bulkPending} aria-label="Fechar" className="h-8 w-8">
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="mt-6 grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="adv-category">Categoria</Label>
+                    <Input id="adv-category" value={advancedCategory} onChange={e => setAdvancedCategory(e.target.value)} list="categories-list" />
+                    {advancedCategory.trim() && !categoriesOptions.includes(advancedCategory.trim()) && (
                       <div className="pt-1">
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={() => handleAddCategoryOption(quickValue)}
+                          onClick={() => handleAddCategoryOption(advancedCategory)}
                         >
-                          Adicionar "{quickValue.trim()}"
+                          Adicionar "{advancedCategory.trim()}"
                         </Button>
                       </div>
                     )}
                   </div>
-                ) : (
                   <div className="space-y-2">
-                    <Label htmlFor="quick-paid-by">Pago por</Label>
-                    <Select id="quick-paid-by" value={quickValue} onChange={e => setQuickValue(e.target.value)}>
+                    <Label htmlFor="adv-paid-by">Pago por</Label>
+                    <Select id="adv-paid-by" value={advancedPaidBy} onChange={e => setAdvancedPaidBy(e.target.value)}>
                       <option value="">Selecione...</option>
                       <option value="Antônio">Antônio</option>
                       <option value="Júlia">Júlia</option>
+                      <option value="Simões">Simões</option>
+                      <option value="Pietro">Pietro</option>
                     </Select>
                   </div>
-                )}
+                  <div className="space-y-2">
+                    <Label htmlFor="adv-date">Data</Label>
+                    <Input id="adv-date" type="date" value={advancedDate} onChange={e => setAdvancedDate(e.target.value)} />
+                  </div>
+                </div>
+                <div className="mt-6 flex justify-end gap-2">
+                  <Button type="button" variant="outline" onClick={() => setBulkAdvancedEditOpen(false)} disabled={bulkPending}>Cancelar</Button>
+                  <Button type="button" onClick={handleConfirmAdvancedEdit} disabled={bulkPending || (!advancedCategory && !advancedPaidBy && !advancedDate)}>
+                    {bulkPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Salvando...</> : <><Save className="mr-2 h-4 w-4" />Aplicar</>}
+                  </Button>
+                </div>
+                {bulkError && <p className="mt-4 text-sm text-destructive" role="alert">{bulkError}</p>}
               </div>
-              <div className="mt-6 flex justify-end gap-2">
-                <Button type="button" variant="outline" onClick={() => setBulkQuickEditOpen(false)} disabled={bulkPending}>Cancelar</Button>
-                <Button type="button" onClick={handleConfirmQuickEdit} disabled={bulkPending || (quickField === "paid_by" && !quickValue)}>
-                  {bulkPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Salvando...</> : <><Save className="mr-2 h-4 w-4" />Aplicar</>}
-                </Button>
-              </div>
-              {bulkError && <p className="mt-4 text-sm text-destructive" role="alert">{bulkError}</p>}
             </div>
           </div>
-        </div>
-      )}
-
-      {bulkAdvancedEditOpen && (
-        <div className="fixed inset-0 z-50">
-          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={() => setBulkAdvancedEditOpen(false)} aria-hidden="true" />
-          <div className="relative flex h-full items-center justify-center p-4">
-            <div className="w-full max-w-lg rounded-lg border border-border bg-card p-6 shadow-lg outline-none" role="dialog" aria-modal="true" aria-labelledby="bulk-adv-title">
-              <div className="flex items-center justify-between">
-                <p id="bulk-adv-title" className="text-lg font-semibold">Edição avançada</p>
-                <Button type="button" variant="ghost" size="icon" onClick={() => setBulkAdvancedEditOpen(false)} disabled={bulkPending} aria-label="Fechar" className="h-8 w-8">
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-              <div className="mt-6 grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="adv-category">Categoria</Label>
-                  <Input id="adv-category" value={advancedCategory} onChange={e => setAdvancedCategory(e.target.value)} list="categories-list" />
-                  {advancedCategory.trim() && !categoriesOptions.includes(advancedCategory.trim()) && (
-                    <div className="pt-1">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleAddCategoryOption(advancedCategory)}
-                      >
-                        Adicionar "{advancedCategory.trim()}"
-                      </Button>
-                    </div>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="adv-paid-by">Pago por</Label>
-                  <Select id="adv-paid-by" value={advancedPaidBy} onChange={e => setAdvancedPaidBy(e.target.value)}>
-                    <option value="">Selecione...</option>
-                    <option value="Antônio">Antônio</option>
-                    <option value="Júlia">Júlia</option>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="adv-date">Data</Label>
-                  <Input id="adv-date" type="date" value={advancedDate} onChange={e => setAdvancedDate(e.target.value)} />
-                </div>
-              </div>
-              <div className="mt-6 flex justify-end gap-2">
-                <Button type="button" variant="outline" onClick={() => setBulkAdvancedEditOpen(false)} disabled={bulkPending}>Cancelar</Button>
-                <Button type="button" onClick={handleConfirmAdvancedEdit} disabled={bulkPending || (!advancedCategory && !advancedPaidBy && !advancedDate)}>
-                  {bulkPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Salvando...</> : <><Save className="mr-2 h-4 w-4" />Aplicar</>}
-                </Button>
-              </div>
-              {bulkError && <p className="mt-4 text-sm text-destructive" role="alert">{bulkError}</p>}
-            </div>
-          </div>
-        </div>
-      )}
+        )
+      }
 
       <section className="space-y-4">
         <div className="rounded-2xl border border-border bg-card/70 p-6 shadow-sm">
@@ -1852,22 +1844,33 @@ export const SpreadsheetDashboard = () => {
                           )}
                         </div>
                       </td>
-                      <td
-                        className={cn(
-                          "px-4 py-1.5 text-right align-middle text-sm font-semibold",
-                          (transaction.amount_owed ?? 0) < 0 ? "text-red-400" : "text-emerald-400"
-                        )}
-                      >
-                        <div className="flex justify-end">
+                      <td className="px-4 py-1.5 text-right align-middle text-sm text-slate-300">
+                        <div className="flex justify-end gap-1 flex-wrap">
                           {isEditing ? (
-                            <Input
-                              name="amount_owed"
-                              value={editForm.amount_owed}
-                              onChange={handleEditInputChange}
-                              required
-                            />
+                            <div className="flex flex-col gap-1 items-end">
+                              {PARTICIPANTS.map(p => (
+                                <div key={p} className="flex items-center gap-2">
+                                  <span className="text-xs">{p}</span>
+                                  <Checkbox
+                                    checked={editForm.participants.includes(p)}
+                                    onChange={(e) => {
+                                      const checked = e.target.checked
+                                      setEditForm(prev => {
+                                        const current = prev.participants
+                                        if (checked) return { ...prev, participants: [...current, p] }
+                                        return { ...prev, participants: current.filter(x => x !== p) }
+                                      })
+                                    }}
+                                  />
+                                </div>
+                              ))}
+                            </div>
                           ) : (
-                            formatCurrency(transaction.amount_owed ?? 0)
+                            (transaction.participants ?? []).map(p => (
+                              <span key={p} className="inline-flex items-center rounded-md bg-slate-800 px-2 py-1 text-xs font-medium text-slate-300 ring-1 ring-inset ring-slate-700/20">
+                                {p}
+                              </span>
+                            ))
                           )}
                         </div>
                       </td>
@@ -1940,7 +1943,7 @@ export const SpreadsheetDashboard = () => {
           </table>
         </div>
       </section>
-    </div>
+    </div >
   )
 }
 
