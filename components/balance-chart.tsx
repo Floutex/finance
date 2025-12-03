@@ -569,7 +569,7 @@ export const BalanceChart = (props: { series: BalancePoint[] }) => {
   return (
     <article
       ref={containerRef}
-      className="relative flex w-full flex-col gap-5 overflow-visible rounded-2xl border border-border/70 bg-card p-4 sm:p-5 lg:gap-6 lg:p-6"
+      className="relative flex w-full flex-col gap-5 overflow-visible rounded-2xl border border-border/70 bg-black/40 p-4 shadow-sm backdrop-blur-xl sm:p-5 lg:gap-6 lg:p-6"
     >
       <header className="flex flex-col gap-4 lg:gap-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between lg:gap-4">
@@ -690,99 +690,99 @@ export const BalanceChart = (props: { series: BalancePoint[] }) => {
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerUp}
           >
-          <defs>
-            <linearGradient id="balance-gradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity="0.3" />
-              <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          {yScale && (
-            <g>
-              {yScale.ticks.map((value, index) => {
-                const position =
-                  chartPadding.top +
-                  innerHeight -
-                  ((value - yScale.min) / yScale.range) * innerHeight
-                const isZero = Math.abs(value) < 0.0001
-                return (
-                  <g key={`${value}-${index}`}>
-                    <line
-                      x1={chartPadding.left}
-                      x2={width - chartPadding.right}
-                      y1={position}
-                      y2={position}
-                      stroke="hsl(var(--border))"
-                      strokeWidth={isZero ? 2 : 1}
-                      strokeDasharray={isZero ? undefined : "2 6"}
-                      opacity={isZero ? 0.8 : 0.25}
-                    />
-                    <text
-                      x={chartPadding.left - 12}
-                      y={position}
-                      fill="hsl(var(--muted-foreground))"
-                      fontSize={11}
-                      textAnchor="end"
-                      dominantBaseline="middle"
-                    >
-                      {formatBalance(value)}
-                    </text>
-                  </g>
-                )
-              })}
-            </g>
-          )}
-          {selectionOverlay && (
-            <>
-              <rect
-                x={selectionOverlay.x}
-                y={selectionOverlay.y}
-                width={selectionOverlay.width}
-                height={selectionOverlay.height}
-                fill="hsl(var(--primary))"
-                opacity={0.12}
-              />
-              <line
-                x1={selectionOverlay.x}
-                x2={selectionOverlay.x}
-                y1={selectionOverlay.y}
-                y2={selectionOverlay.y + selectionOverlay.height}
-                stroke="hsl(var(--primary))"
-                strokeWidth={2}
-                opacity={0.4}
-              />
-              <line
-                x1={selectionOverlay.x + selectionOverlay.width}
-                x2={selectionOverlay.x + selectionOverlay.width}
-                y1={selectionOverlay.y}
-                y2={selectionOverlay.y + selectionOverlay.height}
-                stroke="hsl(var(--primary))"
-                strokeWidth={2}
-                opacity={0.4}
-              />
-            </>
-          )}
-          <path d={area} fill="url(#balance-gradient)" />
-          <path d={path} fill="none" stroke="hsl(var(--primary))" strokeWidth={3} strokeLinecap="round" />
-          {hoverData && (
-            <>
-              <line
-                x1={hoverData.x}
-                x2={hoverData.x}
-                y1={chartPadding.top}
-                y2={chartPadding.top + innerHeight}
-                stroke="hsl(var(--primary))"
-                strokeWidth={1}
-                strokeDasharray="4 4"
-              />
-              <circle cx={hoverData.x} cy={hoverData.y} r={5} fill="hsl(var(--primary))" />
-              <circle cx={hoverData.x} cy={hoverData.y} r={10} fill="hsl(var(--primary))" opacity={0.2} />
-            </>
-          )}
+            <defs>
+              <linearGradient id="balance-gradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity="0.3" />
+                <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            {yScale && (
+              <g>
+                {yScale.ticks.map((value, index) => {
+                  const position =
+                    chartPadding.top +
+                    innerHeight -
+                    ((value - yScale.min) / yScale.range) * innerHeight
+                  const isZero = Math.abs(value) < 0.0001
+                  return (
+                    <g key={`${value}-${index}`}>
+                      <line
+                        x1={chartPadding.left}
+                        x2={width - chartPadding.right}
+                        y1={position}
+                        y2={position}
+                        stroke="hsl(var(--border))"
+                        strokeWidth={isZero ? 2 : 1}
+                        strokeDasharray={isZero ? undefined : "2 6"}
+                        opacity={isZero ? 0.8 : 0.25}
+                      />
+                      <text
+                        x={chartPadding.left - 12}
+                        y={position}
+                        fill="hsl(var(--muted-foreground))"
+                        fontSize={11}
+                        textAnchor="end"
+                        dominantBaseline="middle"
+                      >
+                        {formatBalance(value)}
+                      </text>
+                    </g>
+                  )
+                })}
+              </g>
+            )}
+            {selectionOverlay && (
+              <>
+                <rect
+                  x={selectionOverlay.x}
+                  y={selectionOverlay.y}
+                  width={selectionOverlay.width}
+                  height={selectionOverlay.height}
+                  fill="hsl(var(--primary))"
+                  opacity={0.12}
+                />
+                <line
+                  x1={selectionOverlay.x}
+                  x2={selectionOverlay.x}
+                  y1={selectionOverlay.y}
+                  y2={selectionOverlay.y + selectionOverlay.height}
+                  stroke="hsl(var(--primary))"
+                  strokeWidth={2}
+                  opacity={0.4}
+                />
+                <line
+                  x1={selectionOverlay.x + selectionOverlay.width}
+                  x2={selectionOverlay.x + selectionOverlay.width}
+                  y1={selectionOverlay.y}
+                  y2={selectionOverlay.y + selectionOverlay.height}
+                  stroke="hsl(var(--primary))"
+                  strokeWidth={2}
+                  opacity={0.4}
+                />
+              </>
+            )}
+            <path d={area} fill="url(#balance-gradient)" />
+            <path d={path} fill="none" stroke="hsl(var(--primary))" strokeWidth={3} strokeLinecap="round" />
+            {hoverData && (
+              <>
+                <line
+                  x1={hoverData.x}
+                  x2={hoverData.x}
+                  y1={chartPadding.top}
+                  y2={chartPadding.top + innerHeight}
+                  stroke="hsl(var(--primary))"
+                  strokeWidth={1}
+                  strokeDasharray="4 4"
+                />
+                <circle cx={hoverData.x} cy={hoverData.y} r={5} fill="hsl(var(--primary))" />
+                <circle cx={hoverData.x} cy={hoverData.y} r={10} fill="hsl(var(--primary))" opacity={0.2} />
+              </>
+            )}
           </svg>
 
           {hoverData && tooltipPosition && (
             <div
-              className="pointer-events-none absolute z-30 min-w-[160px] rounded-lg border border-border bg-background/95 px-3 py-2.5 shadow-xl backdrop-blur sm:min-w-[180px] sm:px-4 sm:py-3 lg:min-w-[200px]"
+              className="pointer-events-none absolute z-30 min-w-[160px] rounded-lg border border-border bg-black/80 px-3 py-2.5 shadow-xl backdrop-blur sm:min-w-[180px] sm:px-4 sm:py-3 lg:min-w-[200px]"
               style={tooltipPosition}
               role="tooltip"
             >

@@ -114,10 +114,10 @@ export const CategoryPieChart = (props: { data: CategoryTotal[] }) => {
       }
       const rect = svgRef.current.getBoundingClientRect()
       const viewBox = { x: 0, y: 0, width: 300, height: 300 }
-      
+
       const scaleX = viewBox.width / rect.width
       const scaleY = viewBox.height / rect.height
-      
+
       const svgX = (event.clientX - rect.left) * scaleX
       const svgY = (event.clientY - rect.top) * scaleY
 
@@ -226,7 +226,7 @@ export const CategoryPieChart = (props: { data: CategoryTotal[] }) => {
 
       {hoveredSlice && tooltipPosition && (
         <div
-          className="pointer-events-none absolute z-30 min-w-[180px] rounded-lg border border-border bg-background/95 px-3 py-2.5 shadow-xl backdrop-blur sm:px-4 sm:py-3"
+          className="pointer-events-none absolute z-30 min-w-[180px] rounded-lg border border-border bg-black/80 px-3 py-2.5 shadow-xl backdrop-blur sm:px-4 sm:py-3"
           style={{
             left: `${(tooltipPosition.x / 300) * 100}%`,
             top: `${(tooltipPosition.y / 300) * 100}%`,

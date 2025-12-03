@@ -1,11 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Users, Lock } from "lucide-react"
+import { Lock } from "lucide-react"
 
 const USERS = [
     { name: "Antônio", pin: "1111" },
@@ -19,94 +17,83 @@ interface AccessControlProps {
 }
 
 export function AccessControl({ onLogin }: AccessControlProps) {
-    const [selectedUser, setSelectedUser] = useState<string | null>(null)
     const [pin, setPin] = useState("")
     const [error, setError] = useState("")
 
-    const handleLogin = (e: React.FormEvent) => {
-        e.preventDefault()
-        const user = USERS.find((u) => u.name === selectedUser)
-        if (user && user.pin === pin) {
-            onLogin(user.name)
-        } else {
-            setError("PIN incorreto")
+    const handlePinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value
+        setPin(value)
+        setError("")
+
+        // Auto-login quando o PIN tiver 4 dígitos
+        if (value.length === 4) {
+            const user = USERS.find((u) => u.pin === value)
+            if (user) {
+                onLogin(user.name)
+            } else {
+                setError("PIN incorreto")
+                setTimeout(() => {
+                    setPin("")
+                    setError("")
+                }, 1500)
+            }
         }
     }
 
-    if (!selectedUser) {
-        return (
-            <div className="flex min-h-[80vh] items-center justify-center p-4">
-                <Card className="w-full max-w-md">
-                    <CardHeader className="text-center">
-                        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-                            <Users className="h-6 w-6 text-primary" />
-                        </div>
-                        <CardTitle className="text-2xl">Quem é você?</CardTitle>
-                        <CardDescription>Selecione seu perfil para continuar</CardDescription>
-                    </CardHeader>
-                    <CardContent className="grid gap-4">
-                        {USERS.map((user) => (
-                            <Button
-                                key={user.name}
-                                variant="outline"
-                                className="h-14 text-lg justify-start px-6"
-                                onClick={() => setSelectedUser(user.name)}
-                            >
-                                {user.name}
-                            </Button>
-                        ))}
-                    </CardContent>
-                </Card>
-            </div>
-        )
-    }
-
     return (
-        <div className="flex min-h-[80vh] items-center justify-center p-4">
-            <Card className="w-full max-w-md">
+        <div
+            className="flex min-h-screen items-center justify-center p-4 relative overflow-hidden"
+            style={{
+                background: "#000000"
+            }}
+        >
+            {/* Animated gradient overlays */}
+            <div
+                className="absolute inset-0 opacity-30"
+                style={{
+                    background: `
+                        radial-gradient(circle at 0% 0%, #6B21A8 0%, transparent 50%),
+                        radial-gradient(circle at 100% 0%, #1E40AF 0%, transparent 50%),
+                        radial-gradient(circle at 100% 100%, #EA580C 0%, transparent 50%),
+                        radial-gradient(circle at 0% 100%, #059669 0%, transparent 50%)
+                    `,
+                    animation: "pulse 8s ease-in-out infinite"
+                }}
+            />
+
+            <style jsx>{`
+                @keyframes pulse {
+                    0%, 100% { opacity: 0.3; }
+                    50% { opacity: 0.5; }
+                }
+            `}</style>
+
+            <Card className="w-full max-w-md bg-black/60 backdrop-blur-xl border-white/10 relative z-10">
                 <CardHeader className="text-center">
-                    <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-                        <Lock className="h-6 w-6 text-primary" />
+                    <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-white/10 backdrop-blur-sm">
+                        <Lock className="h-8 w-8 text-white" />
                     </div>
-                    <CardTitle className="text-2xl">Olá, {selectedUser}</CardTitle>
-                    <CardDescription>Digite seu PIN para acessar</CardDescription>
+                    <CardTitle className="text-3xl text-white">Digite seu PIN</CardTitle>
+                    <CardDescription className="text-white/60">Insira seu PIN de 4 dígitos</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <form onSubmit={handleLogin} className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="pin">PIN de 4 dígitos</Label>
-                            <Input
-                                id="pin"
-                                type="password"
-                                maxLength={4}
-                                value={pin}
-                                onChange={(e) => {
-                                    setPin(e.target.value)
-                                    setError("")
-                                }}
-                                className="text-center text-2xl tracking-widest"
-                                autoFocus
-                            />
-                            {error && <p className="text-sm text-destructive text-center">{error}</p>}
-                        </div>
-                        <div className="flex gap-2">
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                className="flex-1"
-                                onClick={() => {
-                                    setSelectedUser(null)
-                                    setPin("")
-                                    setError("")
-                                }}
-                            >
-                                Voltar
-                            </Button>
-                            <Button type="submit" className="flex-1">
-                                Entrar
-                            </Button>
-                        </div>
-                    </form>
+                    <div className="space-y-4">
+                        <Input
+                            type="password"
+                            maxLength={4}
+                            value={pin}
+                            onChange={handlePinChange}
+                            className="text-center text-4xl h-20 bg-white/10 border-white/20 text-white placeholder:text-white/40 focus:border-white/40 focus:ring-white/20"
+                            style={{ letterSpacing: '0.5em', paddingLeft: '0.5em' }}
+                            placeholder="••••"
+                            autoFocus
+                        />
+                        {error && (
+                            <p className="text-sm text-red-400 text-center font-medium animate-pulse">
+                                {error}
+                            </p>
+                        )}
+                    </div>
                 </CardContent>
             </Card>
         </div>

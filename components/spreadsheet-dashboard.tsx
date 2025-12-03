@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
-import { cn } from "@/components/ui/utils"
+import { cn, getUserColorClasses } from "@/components/ui/utils"
 import {
   ChevronDown,
   ChevronUp,
@@ -336,13 +336,20 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
     setSelectedRows([])
   }
 
+  const calculateUserShare = useCallback((transaction: Transaction) => {
+    const participants = transaction.participants ?? []
+    if (participants.length === 0) return 0
+    if (!participants.includes(currentUser)) return 0
+    return (transaction.amount ?? 0) / participants.length
+  }, [currentUser])
+
   const netBalance = useMemo(() => {
     return sortedTransactions.reduce((total, transaction) => total + (transaction.amount_owed ?? 0), 0)
   }, [sortedTransactions])
 
   const totalAmount = useMemo(() => {
-    return sortedTransactions.reduce((total, transaction) => total + (transaction.amount ?? 0), 0)
-  }, [sortedTransactions])
+    return sortedTransactions.reduce((total, transaction) => total + calculateUserShare(transaction), 0)
+  }, [sortedTransactions, calculateUserShare])
 
   const currentMonthStats = useMemo(() => {
     const currentDate = new Date()
@@ -352,24 +359,24 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
     sortedTransactions.forEach(transaction => {
       if (isSameMonth(parseISO(transaction.date), currentDate)) {
         total += transaction.amount_owed ?? 0
-        totalAmountInMonth += transaction.amount ?? 0
+        totalAmountInMonth += calculateUserShare(transaction)
         count += 1
       }
     })
     return { total, totalAmountInMonth, count }
-  }, [sortedTransactions])
+  }, [sortedTransactions, calculateUserShare])
 
   const categoryTotals = useMemo(() => {
     const map = new Map<string, number>()
     sortedTransactions.forEach(transaction => {
       const key = normalizeText(transaction.category) || "Sem categoria"
-      const amount = transaction.amount ?? 0
+      const amount = calculateUserShare(transaction)
       map.set(key, (map.get(key) ?? 0) + amount)
     })
     return Array.from(map.entries())
       .map(([category, total]) => ({ category, total }))
       .sort((first, second) => first.category.localeCompare(second.category, "pt-BR"))
-  }, [sortedTransactions])
+  }, [sortedTransactions, calculateUserShare])
 
   const totalCategoryAmount = useMemo(() => {
     if (categoryTotals.length === 0) {
@@ -392,27 +399,45 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
         : `${selectedCount} transações selecionadas`
 
   const chartSeries = useMemo(() => {
-    if (sortedTransactions.length === 0) {
+    if (transactions.length === 0) {
       return []
     }
-    const grouped = new Map<string, number>()
-    sortedTransactions.forEach(transaction => {
-      const key = transaction.date
-      const amount = transaction.amount_owed ?? 0
-      grouped.set(key, (grouped.get(key) ?? 0) + amount)
-    })
-    const dates = Array.from(grouped.keys()).sort(
-      (first, second) => parseISO(first).getTime() - parseISO(second).getTime()
-    )
-    let running = 0
-    return dates.map(date => {
-      running += grouped.get(date) ?? 0
+
+    // Get all unique dates from transactions sorted chronologically
+    const allDates = Array.from(
+      new Set(transactions.map(t => t.date))
+    ).sort((a, b) => parseISO(a).getTime() - parseISO(b).getTime())
+
+    // Calculate cumulative balance at each date
+    return allDates.map(date => {
+      // Get all transactions up to and including this date
+      const transactionsUpToDate = transactions.filter(
+        t => parseISO(t.date).getTime() <= parseISO(date).getTime()
+      )
+
+      // Calculate simplified debts for this point in time
+      const transactionsForDebt = transactionsUpToDate.map(t => ({
+        paid_by: t.paid_by,
+        amount: t.amount ?? 0,
+        participants: t.participants ?? ["Antônio", "Júlia"]
+      }))
+
+      const debts = simplifyDebts(transactionsForDebt)
+      const myDebtsAtDate = debts.filter(d => d.from === currentUser || d.to === currentUser)
+
+      // Calculate balance at this date
+      const balanceAtDate = myDebtsAtDate.reduce((acc, debt) => {
+        if (debt.from === currentUser) return acc - debt.amount
+        if (debt.to === currentUser) return acc + debt.amount
+        return acc
+      }, 0)
+
       return {
         date,
-        balance: Number(running.toFixed(2))
+        balance: Number(balanceAtDate.toFixed(2))
       }
     })
-  }, [sortedTransactions])
+  }, [transactions, currentUser])
 
   const simplifiedDebts = useMemo(() => {
     const allTransactions = transactions.map(t => ({
@@ -888,35 +913,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
         ))}
       </datalist>
       <section className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="space-y-1">
-            <CardTitle>Suas dívidas simplificadas</CardTitle>
-            <p className="text-sm text-muted-foreground">Quem deve para quem</p>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {myDebts.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Você está quites com todos!</p>
-            ) : (
-              <div className="space-y-2">
-                {myDebts.map((debt, index) => (
-                  <div key={index} className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2">
-                    {debt.from === currentUser ? (
-                      <p className="text-sm">
-                        Você deve <span className="font-semibold text-destructive">{formatCurrency(debt.amount)}</span> para <span className="font-semibold">{debt.to}</span>
-                      </p>
-                    ) : (
-                      <p className="text-sm">
-                        <span className="font-semibold">{debt.from}</span> deve <span className="font-semibold text-green-600">{formatCurrency(debt.amount)}</span> para você
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
+        <Card className="md:col-span-2">
           <CardHeader className="space-y-1">
             <CardTitle>Saldo Total</CardTitle>
             <p className="text-sm text-muted-foreground">Balanço geral de dívidas</p>
@@ -1517,7 +1514,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
       }
 
       <section className="space-y-4">
-        <div className="rounded-2xl border border-border bg-card/70 p-6 shadow-sm">
+        <div className="rounded-2xl border border-border bg-black/40 p-6 shadow-sm backdrop-blur-xl">
           <div className="flex flex-col gap-6">
             <div className="flex w-full flex-col gap-2">
               <Label htmlFor="search" className="text-sm font-semibold">
@@ -1536,7 +1533,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                   value={search}
                   onChange={event => setSearch(event.target.value)}
                   className={cn(
-                    "h-11 w-full rounded-xl border border-border bg-background/80 pl-11 text-sm transition-all",
+                    "h-11 w-full rounded-xl border border-border bg-black/20 pl-11 text-sm transition-all backdrop-blur-sm",
                     search.trim() && "border-primary/60 bg-primary/5 text-foreground shadow-sm"
                   )}
                   aria-controls="transactions-table"
@@ -1555,7 +1552,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                     value={startDate}
                     onChange={event => setStartDate(event.target.value)}
                     className={cn(
-                      "h-11 rounded-xl border border-border bg-background/80 text-sm transition-all focus-visible:ring-0 sm:w-44",
+                      "h-11 rounded-xl border border-border bg-black/20 text-sm transition-all focus-visible:ring-0 backdrop-blur-sm sm:w-44",
                       startDate && "border-primary/60 bg-primary/5 text-foreground shadow-sm"
                     )}
                   />
@@ -1573,7 +1570,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                     value={endDate}
                     onChange={event => setEndDate(event.target.value)}
                     className={cn(
-                      "h-11 rounded-xl border border-border bg-background/80 text-sm transition-all focus-visible:ring-0 sm:w-44",
+                      "h-11 rounded-xl border border-border bg-black/20 text-sm transition-all focus-visible:ring-0 backdrop-blur-sm sm:w-44",
                       endDate && "border-primary/60 bg-primary/5 text-foreground shadow-sm"
                     )}
                   />
@@ -1615,7 +1612,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                         onClick={() => setAddMenuOpen(false)}
                         aria-hidden="true"
                       />
-                      <div className="absolute right-0 top-full z-20 mt-2 w-56 rounded-lg border border-border bg-card shadow-lg">
+                      <div className="absolute right-0 top-full z-20 mt-2 w-56 rounded-lg border border-border bg-black/80 shadow-lg backdrop-blur-xl">
                         <button
                           type="button"
                           onClick={() => {
@@ -1684,27 +1681,27 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
           )}
         </div>
 
-        <div className="overflow-x-auto rounded-2xl border border-border bg-slate-950/80">
+        <div className="overflow-x-auto rounded-2xl border border-border bg-black/40 backdrop-blur-xl">
           <table
             id="transactions-table"
-            className="min-w-full divide-y divide-slate-800 text-slate-100"
+            className="min-w-full divide-y divide-border text-foreground"
             aria-describedby={tableSummaryId}
           >
             <caption id={tableCaptionId} className="px-4 py-2 text-left text-sm text-muted-foreground">
               Tabela de transações compartilhadas
             </caption>
-            <thead className="bg-slate-900/60">
+            <thead className="bg-muted/50">
               <tr>
                 <th
                   scope="col"
-                  className="w-12 px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-400"
+                  className="w-12 px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                 >
                   <input
                     ref={selectAllRef}
                     type="checkbox"
                     checked={sortedTransactions.length > 0 && selectedRows.length === sortedTransactions.length}
                     onChange={handleToggleAll}
-                    className="h-4 w-4 cursor-pointer rounded border border-slate-600 bg-slate-900 accent-indigo-500"
+                    className="h-4 w-4 cursor-pointer rounded border border-input bg-background accent-primary"
                     aria-label="Selecionar todas as transações visíveis"
                   />
                 </th>
@@ -1718,7 +1715,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                     <th
                       key={column.key}
                       className={cn(
-                        "px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-400",
+                        "px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground",
                         column.align === "right" ? "text-right" : "text-left"
                       )}
                       scope="col"
@@ -1728,9 +1725,9 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                         type="button"
                         onClick={() => handleSortToggle(column.key)}
                         className={cn(
-                          "flex w-full items-center gap-1 text-slate-400 transition-colors hover:text-slate-200",
+                          "flex w-full items-center gap-1 text-muted-foreground transition-colors hover:text-foreground",
                           alignmentClasses,
-                          isActive && "text-slate-100"
+                          isActive && "text-foreground"
                         )}
                       >
                         <span className={column.labelClassName}>{column.label}</span>
@@ -1741,13 +1738,13 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                 })}
                 <th
                   scope="col"
-                  className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-400"
+                  className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                 >
                   Ações
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800 bg-slate-950/40">
+            <tbody className="divide-y divide-border bg-card">
               {loading ? (
                 <tr>
                   <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">
@@ -1767,8 +1764,8 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                     <tr
                       key={transaction.id}
                       className={cn(
-                        "transition-colors hover:bg-slate-900/50",
-                        selectedRows.includes(transaction.id) ? "bg-slate-900/70" : ""
+                        "transition-colors hover:bg-muted/50",
+                        selectedRows.includes(transaction.id) ? "bg-muted/70" : ""
                       )}
                       aria-selected={selectedRows.includes(transaction.id)}
                     >
@@ -1778,7 +1775,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                             type="checkbox"
                             checked={selectedRows.includes(transaction.id)}
                             onChange={() => handleToggleRow(transaction.id)}
-                            className="h-4 w-4 cursor-pointer rounded border border-slate-600 bg-slate-900 accent-indigo-500"
+                            className="h-4 w-4 cursor-pointer rounded border border-input bg-background accent-primary"
                             aria-label={`Selecionar ${transaction.description}`}
                           />
                         </div>
@@ -1793,11 +1790,11 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                               required
                             />
                           ) : (
-                            <span className="text-sm font-semibold text-slate-100">{transaction.description}</span>
+                            <span className="text-sm font-semibold text-foreground">{transaction.description}</span>
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-1.5 align-middle text-sm text-slate-300">
+                      <td className="px-4 py-1.5 align-middle text-sm text-muted-foreground">
                         <div className="flex items-center">
                           {isEditing ? (
                             <div className="w-full">
@@ -1820,7 +1817,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-1.5 align-middle text-sm text-slate-300">
+                      <td className="px-4 py-1.5 align-middle text-sm text-muted-foreground">
                         <div className="flex items-center">
                           {isEditing ? (
                             <Input
@@ -1840,13 +1837,16 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                           {isEditing ? (
                             <Input name="paid_by" value={editForm.paid_by} onChange={handleEditInputChange} required />
                           ) : (
-                            <span className="inline-flex items-center rounded-full border border-indigo-500/40 bg-indigo-500/10 px-3 py-0.5 text-xs font-medium text-indigo-300">
+                            <span className={cn(
+                              "inline-flex items-center rounded-full border px-3 py-0.5 text-xs font-medium",
+                              getUserColorClasses(transaction.paid_by)
+                            )}>
                               {transaction.paid_by}
                             </span>
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-1.5 text-right align-middle text-sm text-slate-300 whitespace-nowrap">
+                      <td className="px-4 py-1.5 text-right align-middle text-sm text-muted-foreground whitespace-nowrap">
                         <div className="flex justify-end">
                           {isEditing ? (
                             <Input name="amount" value={editForm.amount} onChange={handleEditInputChange} />
@@ -1855,7 +1855,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-1.5 text-right align-middle text-sm text-slate-300">
+                      <td className="px-4 py-1.5 text-right align-middle text-sm text-muted-foreground">
                         <div className="flex justify-end gap-1 flex-wrap">
                           {isEditing ? (
                             <div className="flex flex-col gap-1 items-end">
@@ -1878,7 +1878,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                             </div>
                           ) : (
                             (transaction.participants ?? []).map(p => (
-                              <span key={p} className="inline-flex items-center rounded-md bg-slate-800 px-2 py-1 text-xs font-medium text-slate-300 ring-1 ring-inset ring-slate-700/20">
+                              <span key={p} className="inline-flex items-center rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground ring-1 ring-inset ring-border">
                                 {p}
                               </span>
                             ))
