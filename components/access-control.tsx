@@ -6,10 +6,10 @@ import { Input } from "@/components/ui/input"
 import { Lock } from "lucide-react"
 
 const USERS = [
-    { name: "Antônio", pin: "1111" },
-    { name: "Júlia", pin: "2222" },
-    { name: "Simões", pin: "3333" },
-    { name: "Pietro", pin: "4444" },
+    { name: "Antônio", pin: "2202" },
+    { name: "Júlia", pin: "3003" },
+    { name: "Simões", pin: "3101" },
+    { name: "Pietro", pin: "1234" },
 ]
 
 interface AccessControlProps {

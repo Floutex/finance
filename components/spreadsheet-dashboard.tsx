@@ -1,6 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { useTransactions } from "@/hooks/use-transactions"
 import { format, isSameMonth, parseISO } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { getSupabaseClient, bulkDeleteByIds, bulkUpdateByIds } from "@/lib/supabase"
@@ -12,9 +13,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
+import { CategorySelector, PayerSelector } from "@/components/transaction-selectors"
 import { cn, getUserColorClasses } from "@/components/ui/utils"
 import {
+  Check,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
   ChevronsUpDown,
   FilterX,
@@ -30,7 +35,6 @@ import {
 } from "lucide-react"
 
 import { simplifyDebts, type Debt } from "@/lib/debt-simplification"
-import { Checkbox } from "@/components/ui/checkbox"
 
 type Transaction = Tables<"shared_transactions">
 type TransactionInsert = TablesInsert<"shared_transactions">
@@ -69,12 +73,12 @@ type ExtractedTransaction = {
   category: string
 }
 
-const initialFormState = (): FormState => {
+const initialFormState = (defaultPayer: string = ""): FormState => {
   const today = new Date().toISOString().slice(0, 10)
   return {
     description: "",
     category: "",
-    paid_by: "",
+    paid_by: defaultPayer,
     date: today,
     amount: "",
     participants: PARTICIPANTS,
@@ -95,15 +99,15 @@ const capitalize = (value: string) => value.charAt(0).toUpperCase() + value.slic
 
 export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) => {
   const supabase = getSupabaseClient()
-  const [transactions, setTransactions] = useState<Transaction[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { transactions, loading, error: fetchError, updateCache, reload } = useTransactions()
+  const [localError, setLocalError] = useState<string | null>(null)
+  const error = localError || fetchError
   const [search, setSearch] = useState("")
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc")
-  const [createForm, setCreateForm] = useState<FormState>(initialFormState)
+  const [createForm, setCreateForm] = useState<FormState>(() => initialFormState(currentUser))
   // const [createOnlyBalance, setCreateOnlyBalance] = useState(false) // Deprecated
   const [createPending, setCreatePending] = useState(false)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
@@ -115,7 +119,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
   const [savePending, setSavePending] = useState(false)
   const [addMenuOpen, setAddMenuOpen] = useState(false)
   const [editRowId, setEditRowId] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState<FormState>(initialFormState)
+  const [editForm, setEditForm] = useState<FormState>(() => initialFormState(currentUser))
   const [editPending, setEditPending] = useState(false)
   const [selectedRows, setSelectedRows] = useState<string[]>([])
   const selectAllRef = useRef<HTMLInputElement>(null)
@@ -131,6 +135,8 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
   const [advancedPaidBy, setAdvancedPaidBy] = useState<string>("")
   const [advancedDate, setAdvancedDate] = useState<string>("")
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const ITEMS_PER_PAGE = 20
   const createFirstFieldRef = useRef<HTMLInputElement>(null)
   const createButtonRef = useRef<HTMLButtonElement>(null)
   const createDialogTitleId = "create-transaction-title"
@@ -138,26 +144,8 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
   const tableCaptionId = "transactions-table-caption"
   const tableSummaryId = "transactions-table-summary"
 
-  const loadTransactions = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    const { data, error: fetchError } = await supabase
-      .from("shared_transactions")
-      .select("*")
-      .order("date", { ascending: false })
-      .order("created_at", { ascending: false })
-    if (fetchError) {
-      setError(fetchError.message)
-      setTransactions([])
-    } else {
-      setTransactions(data ?? [])
-    }
-    setLoading(false)
-  }, [supabase])
-
-  useEffect(() => {
-    loadTransactions()
-  }, [loadTransactions])
+  // Helper to clear local error
+  const setError = (err: string | null) => setLocalError(err)
 
   useEffect(() => {
     if (!createDialogOpen) {
@@ -278,6 +266,17 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
     return copy
   }, [filteredTransactions, sortField, sortDirection])
 
+  const paginatedTransactions = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE
+    return sortedTransactions.slice(start, start + ITEMS_PER_PAGE)
+  }, [sortedTransactions, currentPage])
+
+  const totalPages = Math.ceil(sortedTransactions.length / ITEMS_PER_PAGE)
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [search, startDate, endDate])
+
   const hasActiveFilters = useMemo(() => {
     return Boolean(search.trim() || startDate || endDate)
   }, [search, startDate, endDate])
@@ -336,11 +335,13 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
     setSelectedRows([])
   }
 
-  const calculateUserShare = useCallback((transaction: Transaction) => {
-    const participants = transaction.participants ?? []
-    if (participants.length === 0) return 0
-    if (!participants.includes(currentUser)) return 0
-    return (transaction.amount ?? 0) / participants.length
+  const calculateUserShare = useMemo(() => {
+    return (transaction: Transaction) => {
+      const participants = transaction.participants ?? []
+      if (participants.length === 0) return 0
+      if (!participants.includes(currentUser)) return 0
+      return (transaction.amount ?? 0) / participants.length
+    }
   }, [currentUser])
 
   const netBalance = useMemo(() => {
@@ -348,8 +349,13 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
   }, [sortedTransactions])
 
   const totalAmount = useMemo(() => {
-    return sortedTransactions.reduce((total, transaction) => total + calculateUserShare(transaction), 0)
-  }, [sortedTransactions, calculateUserShare])
+    return sortedTransactions.reduce((total, transaction) => {
+      if (transaction.paid_by === currentUser) {
+        return total + (transaction.amount ?? 0)
+      }
+      return total
+    }, 0)
+  }, [sortedTransactions, currentUser])
 
   const currentMonthStats = useMemo(() => {
     const currentDate = new Date()
@@ -359,24 +365,28 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
     sortedTransactions.forEach(transaction => {
       if (isSameMonth(parseISO(transaction.date), currentDate)) {
         total += transaction.amount_owed ?? 0
-        totalAmountInMonth += calculateUserShare(transaction)
+        if (transaction.paid_by === currentUser) {
+          totalAmountInMonth += (transaction.amount ?? 0)
+        }
         count += 1
       }
     })
     return { total, totalAmountInMonth, count }
-  }, [sortedTransactions, calculateUserShare])
+  }, [sortedTransactions, currentUser])
 
   const categoryTotals = useMemo(() => {
     const map = new Map<string, number>()
     sortedTransactions.forEach(transaction => {
-      const key = normalizeText(transaction.category) || "Sem categoria"
-      const amount = calculateUserShare(transaction)
-      map.set(key, (map.get(key) ?? 0) + amount)
+      if (transaction.paid_by === currentUser) {
+        const key = normalizeText(transaction.category) || "Sem categoria"
+        const amount = transaction.amount ?? 0
+        map.set(key, (map.get(key) ?? 0) + amount)
+      }
     })
     return Array.from(map.entries())
       .map(([category, total]) => ({ category, total }))
       .sort((first, second) => first.category.localeCompare(second.category, "pt-BR"))
-  }, [sortedTransactions, calculateUserShare])
+  }, [sortedTransactions, currentUser])
 
   const totalCategoryAmount = useMemo(() => {
     if (categoryTotals.length === 0) {
@@ -458,45 +468,10 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
     }, 0)
   }, [myDebts, currentUser])
 
-  const [localCategories, setLocalCategories] = useState<string[]>([])
 
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem("categoriesOptions")
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        if (Array.isArray(parsed)) {
-          setLocalCategories(parsed.filter(item => typeof item === "string"))
-        }
-      }
-    } catch { }
-  }, [])
-
-  const categoriesOptions = useMemo(() => {
-    const set = new Set<string>()
-    transactions.forEach(t => {
-      const c = normalizeText(t.category)
-      if (c) set.add(c)
-    })
-    localCategories.forEach(c => {
-      const v = normalizeText(c)
-      if (v) set.add(v)
-    })
-    return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"))
-  }, [transactions, localCategories])
-
-  const handleAddCategoryOption = (value: string) => {
-    const v = normalizeText(value)
-    if (!v) return
-    if (categoriesOptions.includes(v)) return
-    const next = [...new Set([...(localCategories ?? []), v])].sort((a, b) => a.localeCompare(b, "pt-BR"))
-    setLocalCategories(next)
-    try {
-      localStorage.setItem("categoriesOptions", JSON.stringify(next))
-    } catch { }
-  }
 
   const handleSortToggle = (field: SortField) => {
+    setCurrentPage(1)
     if (sortField === field) {
       setSortDirection(prev => (prev === "asc" ? "desc" : "asc"))
     } else {
@@ -535,15 +510,15 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
     if (insertError) {
       setError(insertError.message)
     } else if (data) {
-      setTransactions(previous => [data, ...previous])
-      setCreateForm(initialFormState())
+      updateCache(previous => [data, ...previous])
+      setCreateForm(initialFormState(currentUser))
       setCreateDialogOpen(false)
     }
     setCreatePending(false)
   }
 
   const handleOpenCreateDialog = () => {
-    setCreateForm(initialFormState())
+    setCreateForm(initialFormState(currentUser))
     setError(null)
     setCreateDialogOpen(true)
   }
@@ -554,7 +529,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
     }
     setCreateDialogOpen(false)
     setError(null)
-    setCreateForm(initialFormState())
+    setCreateForm(initialFormState(currentUser))
     requestAnimationFrame(() => {
       createButtonRef.current?.focus()
     })
@@ -581,7 +556,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
 
   const handleCancelEdit = () => {
     setEditRowId(null)
-    setEditForm(initialFormState())
+    setEditForm(initialFormState(currentUser))
   }
 
   const handleSaveEdit = async (transactionId: string) => {
@@ -614,7 +589,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
     if (updateError) {
       setError(updateError.message)
     } else if (data) {
-      setTransactions(previous =>
+      updateCache(previous =>
         previous.map(item => {
           if (item.id === transactionId) {
             return data
@@ -651,11 +626,11 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
       setDeletePendingId(null)
       return
     }
-    setTransactions(previous => previous.filter(item => item.id !== transactionId))
+    updateCache(previous => previous.filter(item => item.id !== transactionId))
     setSelectedRows(previous => previous.filter(item => item !== transactionId))
     if (editRowId === transactionId) {
       setEditRowId(null)
-      setEditForm(initialFormState())
+      setEditForm(initialFormState(currentUser))
     }
     setDeletePendingId(null)
   }
@@ -762,7 +737,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
       if (insertError) {
         setError(insertError.message)
       } else if (data) {
-        setTransactions(previous => [...data, ...previous])
+        updateCache(previous => [...data, ...previous])
         handleCloseUploadDialog()
       }
     } catch (err) {
@@ -831,7 +806,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
       setBulkPending(false)
       return
     }
-    await loadTransactions()
+    await reload()
     setSelectedRows([])
     setBulkPending(false)
     setBulkDeleteOpen(false)
@@ -855,7 +830,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
       setBulkPending(false)
       return
     }
-    await loadTransactions()
+    await reload()
     setSelectedRows([])
     setBulkPending(false)
     setBulkQuickEditOpen(false)
@@ -887,7 +862,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
       setBulkPending(false)
       return
     }
-    await loadTransactions()
+    await reload()
     setSelectedRows([])
     setBulkPending(false)
     setBulkAdvancedEditOpen(false)
@@ -907,11 +882,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
 
   return (
     <div className="space-y-8">
-      <datalist id="categories-list">
-        {categoriesOptions.map(option => (
-          <option key={option} value={option} />
-        ))}
-      </datalist>
+
       <section className="grid gap-4 md:grid-cols-3">
         <Card className="md:col-span-2">
           <CardHeader className="space-y-1">
@@ -965,7 +936,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
       </section>
 
       <section>
-        <BalanceChart series={chartSeries} />
+        <BalanceChart series={chartSeries} currentUser={currentUser} />
       </section>
 
       {createDialogOpen && (
@@ -1016,42 +987,18 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="category">Categoria</Label>
-                  <Input
-                    id="category"
-                    name="category"
-                    list="categories-list"
-                    autoComplete="off"
+                  <CategorySelector
                     value={createForm.category}
-                    onChange={handleInputChange}
+                    onChange={(value) => setCreateForm(prev => ({ ...prev, category: value }))}
                   />
-                  {createForm.category.trim() && !categoriesOptions.includes(createForm.category.trim()) && (
-                    <div className="pt-1">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleAddCategoryOption(createForm.category)}
-                      >
-                        Adicionar "{createForm.category.trim()}"
-                      </Button>
-                    </div>
-                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="paid_by">Pago por</Label>
-                  <Select
-                    id="paid_by"
-                    name="paid_by"
+                  <PayerSelector
                     value={createForm.paid_by}
-                    onChange={handlePaidByChange}
-                    required
-                  >
-                    <option value="">Selecione...</option>
-                    <option value="Antônio">Antônio</option>
-                    <option value="Júlia">Júlia</option>
-                    <option value="Simões">Simões</option>
-                    <option value="Pietro">Pietro</option>
-                  </Select>
+                    onChange={(value) => setCreateForm(prev => ({ ...prev, paid_by: value }))}
+                    currentUser={currentUser}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="date">Data</Label>
@@ -1079,29 +1026,36 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                 </div>
                 <div className="space-y-2">
                   <Label>Participantes</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {PARTICIPANTS.map(participant => (
-                      <div key={participant} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`participant-${participant}`}
-                          checked={createForm.participants.includes(participant)}
-                          onChange={(e) => {
-                            const checked = e.target.checked
-                            setCreateForm(prev => {
-                              const current = prev.participants
-                              if (checked) {
-                                return { ...prev, participants: [...current, participant] }
-                              } else {
+                  <div className="flex flex-wrap gap-2">
+                    {PARTICIPANTS.map(participant => {
+                      const isSelected = createForm.participants.includes(participant)
+                      return (
+                        <label
+                          key={participant}
+                          className={cn(
+                            "flex items-center gap-1.5 cursor-pointer rounded-full px-3 py-1.5 text-sm font-medium transition-all duration-200 border",
+                            isSelected
+                              ? getUserColorClasses(participant)
+                              : "bg-muted/30 text-muted-foreground border-border/50 hover:bg-muted/50"
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={(e) => {
+                              const checked = e.target.checked
+                              setCreateForm(prev => {
+                                const current = prev.participants
+                                if (checked) return { ...prev, participants: [...current, participant] }
                                 return { ...prev, participants: current.filter(p => p !== participant) }
-                              }
-                            })
-                          }}
-                        />
-                        <Label htmlFor={`participant-${participant}`} className="text-sm font-normal cursor-pointer">
+                              })
+                            }}
+                            className="sr-only"
+                          />
                           {participant}
-                        </Label>
-                      </div>
-                    ))}
+                        </label>
+                      )
+                    })}
                   </div>
                   {createForm.participants.length === 0 && (
                     <p className="text-xs text-destructive">Selecione pelo menos um participante</p>
@@ -1281,18 +1235,11 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                               </div>
                               <div className="space-y-2">
                                 <Label htmlFor={`paid_by-${index}`}>Pago por</Label>
-                                <Select
-                                  id={`paid_by-${index}`}
+                                <PayerSelector
                                   value={transaction.paid_by}
-                                  onChange={e => handleUpdateExtractedTransaction(index, "paid_by", e.target.value)}
-                                  required
-                                >
-                                  <option value="">Selecione...</option>
-                                  <option value="Antônio">Antônio</option>
-                                  <option value="Júlia">Júlia</option>
-                                  <option value="Simões">Simões</option>
-                                  <option value="Pietro">Pietro</option>
-                                </Select>
+                                  onChange={(value) => handleUpdateExtractedTransaction(index, "paid_by", value)}
+                                  currentUser={currentUser}
+                                />
                               </div>
                               <div className="space-y-2">
                                 <Label>Participantes</Label>
@@ -1303,25 +1250,10 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                               <div className="space-y-2">
                                 <Label htmlFor={`category-${index}`}>Categoria</Label>
                                 <div>
-                                  <Input
-                                    id={`category-${index}`}
-                                    list="categories-list"
+                                  <CategorySelector
                                     value={transaction.category}
-                                    onChange={e => handleUpdateExtractedTransaction(index, "category", e.target.value)}
+                                    onChange={(value) => handleUpdateExtractedTransaction(index, "category", value)}
                                   />
-                                  {transaction.category.trim() &&
-                                    !categoriesOptions.includes(transaction.category.trim()) && (
-                                      <div className="pt-1">
-                                        <Button
-                                          type="button"
-                                          variant="outline"
-                                          size="sm"
-                                          onClick={() => handleAddCategoryOption(transaction.category)}
-                                        >
-                                          Adicionar "{transaction.category.trim()}"
-                                        </Button>
-                                      </div>
-                                    )}
                                 </div>
                               </div>
                             </div>
@@ -1416,30 +1348,19 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                   {quickField === "category" ? (
                     <div className="space-y-2">
                       <Label htmlFor="quick-value">Novo valor</Label>
-                      <Input id="quick-value" value={quickValue} onChange={e => setQuickValue(e.target.value)} list="categories-list" />
-                      {quickValue.trim() && !categoriesOptions.includes(quickValue.trim()) && (
-                        <div className="pt-1">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleAddCategoryOption(quickValue)}
-                          >
-                            Adicionar "{quickValue.trim()}"
-                          </Button>
-                        </div>
-                      )}
+                      <CategorySelector
+                        value={quickValue}
+                        onChange={(value) => setQuickValue(value)}
+                      />
                     </div>
                   ) : (
                     <div className="space-y-2">
                       <Label htmlFor="quick-paid-by">Pago por</Label>
-                      <Select id="quick-paid-by" value={quickValue} onChange={e => setQuickValue(e.target.value)}>
-                        <option value="">Selecione...</option>
-                        <option value="Antônio">Antônio</option>
-                        <option value="Júlia">Júlia</option>
-                        <option value="Simões">Simões</option>
-                        <option value="Pietro">Pietro</option>
-                      </Select>
+                      <PayerSelector
+                        value={quickValue}
+                        onChange={(value) => setQuickValue(value)}
+                        currentUser={currentUser}
+                      />
                     </div>
                   )}
                 </div>
@@ -1471,29 +1392,18 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                 <div className="mt-6 grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="adv-category">Categoria</Label>
-                    <Input id="adv-category" value={advancedCategory} onChange={e => setAdvancedCategory(e.target.value)} list="categories-list" />
-                    {advancedCategory.trim() && !categoriesOptions.includes(advancedCategory.trim()) && (
-                      <div className="pt-1">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleAddCategoryOption(advancedCategory)}
-                        >
-                          Adicionar "{advancedCategory.trim()}"
-                        </Button>
-                      </div>
-                    )}
+                    <CategorySelector
+                      value={advancedCategory}
+                      onChange={(value) => setAdvancedCategory(value)}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="adv-paid-by">Pago por</Label>
-                    <Select id="adv-paid-by" value={advancedPaidBy} onChange={e => setAdvancedPaidBy(e.target.value)}>
-                      <option value="">Selecione...</option>
-                      <option value="Antônio">Antônio</option>
-                      <option value="Júlia">Júlia</option>
-                      <option value="Simões">Simões</option>
-                      <option value="Pietro">Pietro</option>
-                    </Select>
+                    <PayerSelector
+                      value={advancedPaidBy}
+                      onChange={(value) => setAdvancedPaidBy(value)}
+                      currentUser={currentUser}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="adv-date">Data</Label>
@@ -1758,18 +1668,21 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                   </td>
                 </tr>
               ) : (
-                sortedTransactions.map(transaction => {
+                paginatedTransactions.map(transaction => {
                   const isEditing = editRowId === transaction.id
                   return (
                     <tr
                       key={transaction.id}
                       className={cn(
-                        "transition-colors hover:bg-muted/50",
-                        selectedRows.includes(transaction.id) ? "bg-muted/70" : ""
+                        "transition-all duration-200",
+                        isEditing
+                          ? "bg-primary/5 ring-1 ring-inset ring-primary/20"
+                          : "hover:bg-muted/50",
+                        selectedRows.includes(transaction.id) && !isEditing ? "bg-muted/70" : ""
                       )}
                       aria-selected={selectedRows.includes(transaction.id)}
                     >
-                      <td className="px-4 py-1.5 align-middle whitespace-nowrap">
+                      <td className="px-4 py-2 align-middle whitespace-nowrap">
                         <div className="flex items-center">
                           <input
                             type="checkbox"
@@ -1780,7 +1693,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                           />
                         </div>
                       </td>
-                      <td className="px-4 py-1.5 align-middle">
+                      <td className="px-4 py-2 align-middle">
                         <div className="flex items-center">
                           {isEditing ? (
                             <Input
@@ -1788,36 +1701,28 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                               value={editForm.description}
                               onChange={handleEditInputChange}
                               required
+                              className="h-9 rounded-lg border-border/50 bg-background/80 backdrop-blur-sm focus:border-primary/50 focus:bg-background"
                             />
                           ) : (
                             <span className="text-sm font-semibold text-foreground">{transaction.description}</span>
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-1.5 align-middle text-sm text-muted-foreground">
+                      <td className="px-4 py-2 align-middle text-sm text-muted-foreground">
                         <div className="flex items-center">
                           {isEditing ? (
-                            <div className="w-full">
-                              <Input name="category" value={editForm.category} onChange={handleEditInputChange} list="categories-list" />
-                              {editForm.category.trim() && !categoriesOptions.includes(editForm.category.trim()) && (
-                                <div className="pt-1">
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleAddCategoryOption(editForm.category)}
-                                  >
-                                    Adicionar "{editForm.category.trim()}"
-                                  </Button>
-                                </div>
-                              )}
+                            <div className="w-full min-w-[140px]">
+                              <CategorySelector
+                                value={editForm.category}
+                                onChange={(value) => setEditForm(prev => ({ ...prev, category: value }))}
+                              />
                             </div>
                           ) : (
                             normalizeText(transaction.category) || "—"
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-1.5 align-middle text-sm text-muted-foreground">
+                      <td className="px-4 py-2 align-middle text-sm text-muted-foreground">
                         <div className="flex items-center">
                           {isEditing ? (
                             <Input
@@ -1826,16 +1731,23 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                               value={editForm.date}
                               onChange={handleEditInputChange}
                               required
+                              className="h-9 rounded-lg border-border/50 bg-background/80 backdrop-blur-sm focus:border-primary/50 focus:bg-background"
                             />
                           ) : (
                             format(parseISO(transaction.date), "dd/MM/yyyy")
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-1.5 align-middle">
+                      <td className="px-4 py-2 align-middle">
                         <div className="flex items-center">
                           {isEditing ? (
-                            <Input name="paid_by" value={editForm.paid_by} onChange={handleEditInputChange} required />
+                            <div className="min-w-[130px]">
+                              <PayerSelector
+                                value={editForm.paid_by}
+                                onChange={(value) => setEditForm(prev => ({ ...prev, paid_by: value }))}
+                                currentUser={currentUser}
+                              />
+                            </div>
                           ) : (
                             <span className={cn(
                               "inline-flex items-center rounded-full border px-3 py-0.5 text-xs font-medium",
@@ -1846,59 +1758,85 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-1.5 text-right align-middle text-sm text-muted-foreground whitespace-nowrap">
+                      <td className="px-4 py-2 text-right align-middle text-sm text-muted-foreground whitespace-nowrap">
                         <div className="flex justify-end">
                           {isEditing ? (
-                            <Input name="amount" value={editForm.amount} onChange={handleEditInputChange} />
+                            <Input
+                              name="amount"
+                              value={editForm.amount}
+                              onChange={handleEditInputChange}
+                              inputMode="decimal"
+                              placeholder="0,00"
+                              className="h-9 w-28 rounded-lg border-border/50 bg-background/80 text-right backdrop-blur-sm focus:border-primary/50 focus:bg-background"
+                            />
                           ) : (
                             transaction.amount !== null ? formatCurrency(transaction.amount) : "—"
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-1.5 text-right align-middle text-sm text-muted-foreground">
-                        <div className="flex justify-end gap-1 flex-wrap">
+                      <td className="px-4 py-2 text-right align-middle text-sm text-muted-foreground">
+                        <div className="flex justify-end gap-1.5 flex-wrap">
                           {isEditing ? (
-                            <div className="flex flex-col gap-1 items-end">
-                              {PARTICIPANTS.map(p => (
-                                <div key={p} className="flex items-center gap-2">
-                                  <span className="text-xs">{p}</span>
-                                  <Checkbox
-                                    checked={editForm.participants.includes(p)}
-                                    onChange={(e) => {
-                                      const checked = e.target.checked
-                                      setEditForm(prev => {
-                                        const current = prev.participants
-                                        if (checked) return { ...prev, participants: [...current, p] }
-                                        return { ...prev, participants: current.filter(x => x !== p) }
-                                      })
-                                    }}
-                                  />
-                                </div>
-                              ))}
+                            <div className="flex flex-wrap gap-2 justify-end">
+                              {PARTICIPANTS.map(p => {
+                                const isSelected = editForm.participants.includes(p)
+                                return (
+                                  <label
+                                    key={p}
+                                    className={cn(
+                                      "flex items-center gap-1.5 cursor-pointer rounded-full px-2.5 py-1 text-xs font-medium transition-all duration-200 border",
+                                      isSelected
+                                        ? getUserColorClasses(p)
+                                        : "bg-muted/30 text-muted-foreground border-border/50 hover:bg-muted/50"
+                                    )}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={(e) => {
+                                        const checked = e.target.checked
+                                        setEditForm(prev => {
+                                          const current = prev.participants
+                                          if (checked) return { ...prev, participants: [...current, p] }
+                                          return { ...prev, participants: current.filter(x => x !== p) }
+                                        })
+                                      }}
+                                      className="sr-only"
+                                    />
+                                    {p}
+                                  </label>
+                                )
+                              })}
                             </div>
                           ) : (
                             (transaction.participants ?? []).map(p => (
-                              <span key={p} className="inline-flex items-center rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground ring-1 ring-inset ring-border">
+                              <span
+                                key={p}
+                                className={cn(
+                                  "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium",
+                                  getUserColorClasses(p)
+                                )}
+                              >
                                 {p}
                               </span>
                             ))
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-1.5 text-right align-middle">
-                        <div className="flex justify-end items-center gap-2">
+                      <td className="px-4 py-2 text-right align-middle">
+                        <div className="flex justify-end items-center gap-1.5">
                           {isEditing ? (
                             <>
                               <Button
                                 type="button"
-                                variant="outline"
+                                variant="ghost"
                                 size="icon"
                                 onClick={handleCancelEdit}
                                 disabled={editPending}
                                 aria-label="Cancelar edição"
-                                className="h-8 w-8"
+                                className="h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                               >
-                                <X className="h-3 w-3" />
+                                <X className="h-4 w-4" />
                               </Button>
                               <Button
                                 type="button"
@@ -1906,12 +1844,12 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                                 onClick={() => handleSaveEdit(transaction.id)}
                                 disabled={editPending}
                                 aria-label="Salvar edição"
-                                className="h-8 w-8"
+                                className="h-8 w-8 rounded-lg bg-green-600 hover:bg-green-500 text-white shadow-sm"
                               >
                                 {editPending ? (
-                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                  <Loader2 className="h-4 w-4 animate-spin" />
                                 ) : (
-                                  <Save className="h-3 w-3" />
+                                  <Check className="h-4 w-4" />
                                 )}
                               </Button>
                             </>
@@ -1919,27 +1857,27 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                             <>
                               <Button
                                 type="button"
-                                variant="outline"
+                                variant="ghost"
                                 size="icon"
                                 onClick={() => handleEdit(transaction)}
                                 aria-label="Editar transação"
-                                className="h-8 w-8"
+                                className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted"
                               >
-                                <Pencil className="h-3 w-3" />
+                                <Pencil className="h-3.5 w-3.5" />
                               </Button>
                               <Button
                                 type="button"
-                                variant="outline"
+                                variant="ghost"
                                 size="icon"
                                 onClick={() => handleDelete(transaction.id)}
                                 disabled={deletePendingId === transaction.id}
                                 aria-label="Excluir transação"
-                                className="h-8 w-8"
+                                className="h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                               >
                                 {deletePendingId === transaction.id ? (
-                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                 ) : (
-                                  <Trash2 className="h-3 w-3" />
+                                  <Trash2 className="h-3.5 w-3.5" />
                                 )}
                               </Button>
                             </>
@@ -1954,6 +1892,30 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
           </table>
         </div>
       </section>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-4 pb-8">
+          <Button
+            variant="outline"
+            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+          >
+            <ChevronLeft className="mr-2 h-4 w-4" />
+            Anterior
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            Página {currentPage} de {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+          >
+            Próxima
+            <ChevronRight className="ml-2 h-4 w-4" />
+          </Button>
+        </div>
+      )}
     </div >
   )
 }

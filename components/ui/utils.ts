@@ -25,3 +25,28 @@ export const getUserColorClasses = (name: string) => {
   }
 }
 
+// Retorna a cor principal do usuário em formato HSL para uso em SVG
+export const getUserColor = (name: string) => {
+  switch (name) {
+    case "Simões": return "hsl(142, 71%, 45%)"  // green-500
+    case "Pietro": return "hsl(25, 95%, 53%)"   // orange-500
+    case "Antônio": return "hsl(217, 91%, 60%)" // blue-500
+    case "Júlia": return "hsl(271, 81%, 56%)"   // purple-500
+    default: return "hsl(var(--primary))"
+  }
+}
+
+// Retorna um array de cores para múltiplas categorias, priorizando as cores dos usuários
+export const getUserColors = () => {
+  return [
+    "hsl(217, 91%, 60%)", // Antônio - blue
+    "hsl(271, 81%, 56%)", // Júlia - purple
+    "hsl(142, 71%, 45%)", // Simões - green
+    "hsl(25, 95%, 53%)",  // Pietro - orange
+    "hsl(199, 89%, 48%)", // cyan
+    "hsl(43, 96%, 56%)",  // yellow
+    "hsl(330, 81%, 60%)", // pink
+    "hsl(0, 72%, 51%)"    // red
+  ]
+}
+

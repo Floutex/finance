@@ -1,104 +1,24 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { format, parseISO, subMonths, subYears } from "date-fns"
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  ReferenceLine
+} from "recharts"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { cn } from "@/components/ui/utils"
+import { cn, getUserColor } from "@/components/ui/utils"
 
 type BalancePoint = {
   date: string
   balance: number
-}
-
-type Scale = {
-  min: number
-  max: number
-  range: number
-}
-
-const computeScale = (series: BalancePoint[]): Scale => {
-  if (series.length === 0) {
-    return {
-      min: 0,
-      max: 0,
-      range: 1
-    }
-  }
-  const balances = series.map(point => point.balance)
-  let min = Math.min(...balances, 0)
-  let max = Math.max(...balances, 0)
-  if (min === max) {
-    const padding = Math.max(Math.abs(min) * 0.1, 1)
-    min -= padding
-    max += padding
-  }
-  const range = max - min === 0 ? 1 : max - min
-  return {
-    min,
-    max,
-    range
-  }
-}
-
-const buildPath = (
-  series: BalancePoint[],
-  width: number,
-  height: number,
-  padding: { top: number; right: number; bottom: number; left: number },
-  scale: Scale
-) => {
-  if (series.length === 0) {
-    return ""
-  }
-  const innerWidth = width - padding.left - padding.right
-  const innerHeight = height - padding.top - padding.bottom
-  const step = series.length === 1 ? 0 : innerWidth / (series.length - 1)
-  return series
-    .map((point, index) => {
-      const x = padding.left + step * index
-      const y = padding.top + innerHeight - ((point.balance - scale.min) / scale.range) * innerHeight
-      return `${index === 0 ? "M" : "L"}${x},${Number.isFinite(y) ? y : height}`
-    })
-    .join(" ")
-}
-
-const buildArea = (
-  series: BalancePoint[],
-  width: number,
-  height: number,
-  padding: { top: number; right: number; bottom: number; left: number },
-  scale: Scale
-) => {
-  if (series.length === 0) {
-    return ""
-  }
-  const innerWidth = width - padding.left - padding.right
-  const innerHeight = height - padding.top - padding.bottom
-  const step = series.length === 1 ? 0 : innerWidth / (series.length - 1)
-  const top = series
-    .map((point, index) => {
-      const x = padding.left + step * index
-      const y = padding.top + innerHeight - ((point.balance - scale.min) / scale.range) * innerHeight
-      return `${index === 0 ? "M" : "L"}${x},${Number.isFinite(y) ? y : height}`
-    })
-    .join(" ")
-  const lastX = padding.left + step * (series.length - 1)
-  const bottom = padding.top + innerHeight
-  return `${top} L${lastX},${bottom} L${padding.left},${bottom} Z`
-}
-
-const pickAxisLabels = (series: BalancePoint[]) => {
-  if (series.length === 0) {
-    return []
-  }
-  if (series.length <= 3) {
-    return series.map(point => point.date)
-  }
-  const first = series[0].date
-  const middle = series[Math.floor(series.length / 2)].date
-  const last = series[series.length - 1].date
-  return [first, middle, last]
 }
 
 const normalizeDate = (value: string) => {
@@ -111,6 +31,15 @@ const normalizeDate = (value: string) => {
 
 const formatBalance = (value: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value)
+
+const formatAxisLabel = (value: number) => {
+  const absValue = Math.abs(value)
+  const sign = value < 0 ? "-" : ""
+  if (absValue >= 1000) {
+    return `${sign}${(absValue / 1000).toFixed(1).replace('.0', '')}k`
+  }
+  return `${sign}${absValue.toFixed(0)}`
+}
 
 const formatSignedCurrency = (value: number) => {
   if (value === 0) {
@@ -128,101 +57,75 @@ const formatSignedPercent = (value: number | null) => {
     return "0%"
   }
   const prefix = value > 0 ? "+" : ""
-  return `${prefix}${Math.abs(value).toFixed(2)}%`
+  return `${prefix}${value.toFixed(2)}%`
 }
 
 type QuickRange = "1M" | "3M" | "6M" | "1A" | "ALL"
 
-export const BalanceChart = (props: { series: BalancePoint[] }) => {
-  const containerRef = useRef<HTMLDivElement | null>(null)
-  const [width, setWidth] = useState(700)
-  const height = useMemo(() => Math.max(280, Math.min(400, width * 0.45)), [width])
-  const svgRef = useRef<SVGSVGElement | null>(null)
-  const pointerIdRef = useRef<number | null>(null)
-  const [labelFont, setLabelFont] = useState("12px sans-serif")
+interface CustomTooltipProps {
+  active?: boolean
+  payload?: Array<{ payload: { date: string; balance: number; formattedDate: string } }>
+  userColor: string
+}
+
+const CustomTooltip = ({ active, payload, userColor }: CustomTooltipProps) => {
+  if (!active || !payload || payload.length === 0) {
+    return null
+  }
+  const data = payload[0].payload
+  return (
+    <div className="rounded-lg border border-border bg-black/90 px-3 py-2.5 shadow-xl backdrop-blur">
+      <div className="text-[10px] font-semibold uppercase text-muted-foreground">
+        {data.formattedDate}
+      </div>
+      <div className="mt-1 text-sm font-semibold" style={{ color: userColor }}>
+        {formatBalance(data.balance)}
+      </div>
+    </div>
+  )
+}
+
+export const BalanceChart = (props: { series: BalancePoint[]; currentUser?: string }) => {
   const [activeRange, setActiveRange] = useState<QuickRange | null>(null)
+
+  const userColor = useMemo(() => {
+    return props.currentUser ? getUserColor(props.currentUser) : "hsl(var(--primary))"
+  }, [props.currentUser])
+
   const normalizedSeries = useMemo(() => {
-    const list = props.series
+    return props.series
       .map(point => ({
         date: normalizeDate(point.date),
         balance: point.balance
       }))
       .sort((first, second) => parseISO(first.date).getTime() - parseISO(second.date).getTime())
-    return list
   }, [props.series])
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return
-    }
-    const bodyStyles = window.getComputedStyle(document.body)
-    const fontFamily = bodyStyles.fontFamily || "sans-serif"
-    setLabelFont(`12px ${fontFamily}`)
-  }, [])
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return
-    }
-    const element = containerRef.current
-    if (!element) {
-      return
-    }
-    const syncWidth = () => {
-      const rect = element.getBoundingClientRect()
-      const totalWidth = rect.width
-      if (!Number.isFinite(totalWidth) || totalWidth <= 0) {
-        return
-      }
-      setWidth(previous => {
-        if (Math.abs(previous - totalWidth) < 1) {
-          return previous
-        }
-        return totalWidth
-      })
-    }
-    syncWidth()
-    const observer = new ResizeObserver(() => {
-      syncWidth()
-    })
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [])
+
   const [startDate, setStartDate] = useState(() => normalizedSeries[0]?.date ?? "")
   const [endDate, setEndDate] = useState(() => normalizedSeries[normalizedSeries.length - 1]?.date ?? "")
+
   useEffect(() => {
     if (normalizedSeries.length === 0) {
       setStartDate("")
       setEndDate("")
       return
     }
-    setStartDate(previous => {
-      if (!previous) {
+    setStartDate(prev => {
+      if (!prev || prev < normalizedSeries[0].date || prev > normalizedSeries[normalizedSeries.length - 1].date) {
         return normalizedSeries[0].date
       }
-      if (previous < normalizedSeries[0].date) {
-        return normalizedSeries[0].date
-      }
-      if (previous > normalizedSeries[normalizedSeries.length - 1].date) {
-        return normalizedSeries[0].date
-      }
-      return previous
+      return prev
     })
-    setEndDate(previous => {
-      if (!previous) {
+    setEndDate(prev => {
+      if (!prev || prev > normalizedSeries[normalizedSeries.length - 1].date || prev < normalizedSeries[0].date) {
         return normalizedSeries[normalizedSeries.length - 1].date
       }
-      if (previous > normalizedSeries[normalizedSeries.length - 1].date) {
-        return normalizedSeries[normalizedSeries.length - 1].date
-      }
-      if (previous < normalizedSeries[0].date) {
-        return normalizedSeries[normalizedSeries.length - 1].date
-      }
-      return previous
+      return prev
     })
   }, [normalizedSeries])
+
   const filteredSeries = useMemo(() => {
-    if (normalizedSeries.length === 0) {
-      return []
-    }
+    if (normalizedSeries.length === 0) return []
     const start = startDate ? parseISO(startDate) : null
     const end = endDate ? parseISO(endDate) : null
     const subset = normalizedSeries.filter(point => {
@@ -231,93 +134,19 @@ export const BalanceChart = (props: { series: BalancePoint[] }) => {
       const beforeEnd = end ? current <= end : true
       return afterStart && beforeEnd
     })
-    if (subset.length === 0) {
-      return normalizedSeries
-    }
-    return subset
+    return subset.length === 0 ? normalizedSeries : subset
   }, [normalizedSeries, startDate, endDate])
-  const scale = useMemo(() => computeScale(filteredSeries), [filteredSeries])
-  const labels = useMemo(() => pickAxisLabels(filteredSeries), [filteredSeries])
-  const yScale = useMemo(() => {
-    if (filteredSeries.length === 0) {
-      return null
-    }
-    const tickCount = 3
-    const stepValue = scale.range / tickCount
-    const ticks = Array.from({ length: tickCount + 1 }, (_, index) =>
-      Number((scale.min + stepValue * index).toFixed(2))
-    )
-    return {
-      ...scale,
-      ticks
-    }
-  }, [filteredSeries, scale])
-  const maxLabelWidth = useMemo(() => {
-    if (!yScale || typeof window === "undefined") {
-      return 0
-    }
-    const canvas = document.createElement("canvas")
-    const context = canvas.getContext("2d")
-    if (!context) {
-      return 0
-    }
-    context.font = labelFont
-    const values = yScale.ticks.map(value => formatBalance(value))
-    const widths = values.map(value => context.measureText(value).width)
-    return widths.length > 0 ? Math.max(...widths) : 0
-  }, [yScale, labelFont])
-  const chartPadding = useMemo(
-    () => ({
-      top: 24,
-      right: 24,
-      bottom: 48,
-      left: Math.max(48, Math.ceil(maxLabelWidth) + 24)
-    }),
-    [maxLabelWidth]
-  )
-  const innerWidth = width - chartPadding.left - chartPadding.right
-  const innerHeight = height - chartPadding.top - chartPadding.bottom
-  const path = useMemo(
-    () => buildPath(filteredSeries, width, height, chartPadding, scale),
-    [filteredSeries, scale, chartPadding, width, height]
-  )
-  const area = useMemo(
-    () => buildArea(filteredSeries, width, height, chartPadding, scale),
-    [filteredSeries, scale, chartPadding, width, height]
-  )
-  const [hoverIndex, setHoverIndex] = useState<number | null>(null)
-  const [isSelecting, setIsSelecting] = useState(false)
-  const [selectionStartIndex, setSelectionStartIndex] = useState<number | null>(null)
-  const [selectionEndIndex, setSelectionEndIndex] = useState<number | null>(null)
-  const hoverData = useMemo(() => {
-    if (
-      hoverIndex === null ||
-      filteredSeries.length === 0 ||
-      hoverIndex < 0 ||
-      hoverIndex >= filteredSeries.length
-    ) {
-      return null
-    }
-    const point = filteredSeries[hoverIndex]
-    const innerStep = filteredSeries.length === 1 ? 0 : innerWidth / (filteredSeries.length - 1)
-    const x = chartPadding.left + innerStep * hoverIndex
-    const y =
-      chartPadding.top + innerHeight - ((point.balance - scale.min) / scale.range) * innerHeight
-    const baseline = filteredSeries[0].balance
-    const changeValue = Number((point.balance - baseline).toFixed(2))
-    const percentValue =
-      baseline === 0 ? null : Number(((changeValue / baseline) * 100).toFixed(2))
-    return {
-      point,
-      x,
-      y: Number.isFinite(y) ? y : chartPadding.top + innerHeight,
-      ratio: innerStep === 0 ? 0 : Math.min(1, Math.max(0, (x - chartPadding.left) / innerWidth)),
-      change: changeValue,
-      percentChange: percentValue
-    }
-  }, [filteredSeries, hoverIndex, scale, innerWidth, innerHeight, chartPadding])
+
+  const chartData = useMemo(() => {
+    return filteredSeries.map(point => ({
+      ...point,
+      formattedDate: format(parseISO(point.date), "dd/MM/yyyy")
+    }))
+  }, [filteredSeries])
+
   const minDate = normalizedSeries[0]?.date ?? ""
   const maxDate = normalizedSeries[normalizedSeries.length - 1]?.date ?? ""
+
   const periodLabel = useMemo(() => {
     if (!startDate && !endDate && minDate && maxDate) {
       return `${format(parseISO(minDate), "dd MMM yyyy")} — ${format(parseISO(maxDate), "dd MMM yyyy")}`
@@ -332,231 +161,66 @@ export const BalanceChart = (props: { series: BalancePoint[] }) => {
     }
     return `${startText} — ${endText}`
   }, [startDate, endDate, minDate, maxDate])
+
   const customRangeActive = useMemo(() => {
-    if (!startDate || !endDate || !minDate || !maxDate) {
-      return false
-    }
+    if (!startDate || !endDate || !minDate || !maxDate) return false
     return startDate !== minDate || endDate !== maxDate
   }, [startDate, endDate, minDate, maxDate])
-  const selectionOverlay = useMemo(() => {
-    if (
-      selectionStartIndex === null ||
-      selectionEndIndex === null ||
-      filteredSeries.length === 0 ||
-      selectionStartIndex < 0 ||
-      selectionEndIndex < 0 ||
-      selectionStartIndex >= filteredSeries.length ||
-      selectionEndIndex >= filteredSeries.length
-    ) {
-      return null
-    }
-    const step = filteredSeries.length === 1 ? 0 : innerWidth / (filteredSeries.length - 1)
-    const firstIndex = Math.min(selectionStartIndex, selectionEndIndex)
-    const lastIndex = Math.max(selectionStartIndex, selectionEndIndex)
-    const x1 = chartPadding.left + step * firstIndex
-    const x2 = chartPadding.left + step * lastIndex
-    return {
-      x: x1,
-      width: x2 - x1 || 1,
-      y: chartPadding.top,
-      height: innerHeight
-    }
-  }, [selectionStartIndex, selectionEndIndex, filteredSeries, chartPadding, innerWidth, innerHeight])
+
   const variationSummary = useMemo(() => {
-    if (filteredSeries.length === 0) {
-      return null
-    }
+    if (filteredSeries.length === 0) return null
     const first = filteredSeries[0]
     const last = filteredSeries[filteredSeries.length - 1]
     const change = Number((last.balance - first.balance).toFixed(2))
-    const percentChange =
-      first.balance === 0 ? null : Number(((change / first.balance) * 100).toFixed(2))
+    const percentChange = first.balance === 0 ? null : Number(((change / first.balance) * 100).toFixed(2))
     return {
       startDate: first.date,
       endDate: last.date,
-      startBalance: first.balance,
-      endBalance: last.balance,
       change,
       percentChange
     }
   }, [filteredSeries])
-  const tooltipPosition = useMemo(() => {
-    if (!hoverData) {
-      return null
-    }
-    const clampedLeft = Math.min(95, Math.max(5, (hoverData.x / width) * 100))
-    let transform = "translate(-50%, -110%)"
-    if (hoverData.ratio < 0.15) {
-      transform = "translate(-10%, -110%)"
-    } else if (hoverData.ratio > 0.85) {
-      transform = "translate(-90%, -110%)"
-    }
-    return {
-      left: `${clampedLeft}%`,
-      top: `${(hoverData.y / height) * 100}%`,
-      transform
-    }
-  }, [hoverData, width, height])
-  const getIndexFromEvent = useCallback(
-    (event: React.PointerEvent<SVGSVGElement>) => {
-      if (!svgRef.current || filteredSeries.length === 0) {
-        return null
-      }
-      const rect = svgRef.current.getBoundingClientRect()
-      const pointerX = ((event.clientX - rect.left) / rect.width) * width
-      const normalizedX = pointerX - chartPadding.left
-      const clampedX = Math.min(Math.max(normalizedX, 0), innerWidth)
-      const step = filteredSeries.length === 1 ? 0 : innerWidth / (filteredSeries.length - 1)
-      const index = step === 0 ? 0 : Math.round(clampedX / step)
-      const clamped = Math.min(filteredSeries.length - 1, Math.max(0, index))
-      return clamped
-    },
-    [filteredSeries, chartPadding.left, innerWidth, width]
-  )
-  const handlePointerMove = useCallback(
-    (event: React.PointerEvent<SVGSVGElement>) => {
-      const index = getIndexFromEvent(event)
-      if (index === null) {
-        return
-      }
-      setHoverIndex(index)
-      if (isSelecting) {
-        setSelectionEndIndex(index)
-      }
-    },
-    [getIndexFromEvent, isSelecting]
-  )
-  const handlePointerLeave = useCallback(() => {
-    setHoverIndex(null)
+
+  const handleStartChange = useCallback((value: string) => {
+    setActiveRange(null)
+    setStartDate(value)
+    setEndDate(prev => (!prev || (value && prev < value)) ? value : prev)
   }, [])
-  useEffect(() => {
-    if (filteredSeries.length === 0) {
-      setHoverIndex(null)
-      return
-    }
-    setHoverIndex(previous => {
-      if (previous === null) {
-        return previous
-      }
-      if (previous < 0 || previous >= filteredSeries.length) {
-        return filteredSeries.length - 1
-      }
-      return previous
-    })
-  }, [filteredSeries])
-  const handlePointerDown = useCallback(
-    (event: React.PointerEvent<SVGSVGElement>) => {
-      const index = getIndexFromEvent(event)
-      if (index === null) {
-        return
-      }
-      event.preventDefault()
-      pointerIdRef.current = event.pointerId
-      event.currentTarget.setPointerCapture(event.pointerId)
-      setIsSelecting(true)
-      setSelectionStartIndex(index)
-      setSelectionEndIndex(index)
-      setHoverIndex(index)
-    },
-    [getIndexFromEvent]
-  )
-  const handlePointerUp = useCallback(
-    (event: React.PointerEvent<SVGSVGElement>) => {
-      if (pointerIdRef.current !== null && event.currentTarget.hasPointerCapture(pointerIdRef.current)) {
-        event.currentTarget.releasePointerCapture(pointerIdRef.current)
-      }
-      pointerIdRef.current = null
-      if (!isSelecting || selectionStartIndex === null || selectionEndIndex === null || filteredSeries.length === 0) {
-        setIsSelecting(false)
-        return
-      }
-      const firstIndex = Math.min(selectionStartIndex, selectionEndIndex)
-      const lastIndex = Math.max(selectionStartIndex, selectionEndIndex)
-      if (firstIndex === lastIndex) {
-        setIsSelecting(false)
-        setSelectionStartIndex(null)
-        setSelectionEndIndex(null)
-        return
-      }
-      const firstDate = filteredSeries[firstIndex].date
-      const lastDate = filteredSeries[lastIndex].date
-      setStartDate(firstDate)
-      setEndDate(lastDate)
-      setActiveRange(null)
-      setIsSelecting(false)
-      setSelectionStartIndex(null)
-      setSelectionEndIndex(null)
-    },
-    [isSelecting, selectionStartIndex, selectionEndIndex, filteredSeries]
-  )
-  const handleStartChange = useCallback(
-    (value: string) => {
-      setActiveRange(null)
-      setStartDate(value)
-      setEndDate(previous => {
-        if (!previous || (value && previous < value)) {
-          return value
-        }
-        return previous
-      })
-    },
-    []
-  )
-  const handleEndChange = useCallback(
-    (value: string) => {
-      setActiveRange(null)
-      setEndDate(value)
-      setStartDate(previous => {
-        if (!previous || (value && previous > value)) {
-          return value
-        }
-        return previous
-      })
-    },
-    []
-  )
-  const applyQuickRange = useCallback(
-    (range: QuickRange) => {
-      if (normalizedSeries.length === 0) {
-        return
-      }
-      const firstDate = parseISO(normalizedSeries[0].date)
-      const lastDate = parseISO(normalizedSeries[normalizedSeries.length - 1].date)
-      if (range === "ALL") {
-        setStartDate(format(firstDate, "yyyy-MM-dd"))
-        setEndDate(format(lastDate, "yyyy-MM-dd"))
-        setActiveRange(range)
-        return
-      }
-      let computedStart = firstDate
-      if (range === "1M") {
-        computedStart = subMonths(lastDate, 1)
-      } else if (range === "3M") {
-        computedStart = subMonths(lastDate, 3)
-      } else if (range === "6M") {
-        computedStart = subMonths(lastDate, 6)
-      } else if (range === "1A") {
-        computedStart = subYears(lastDate, 1)
-      }
-      if (computedStart < firstDate) {
-        computedStart = firstDate
-      }
-      setStartDate(format(computedStart, "yyyy-MM-dd"))
+
+  const handleEndChange = useCallback((value: string) => {
+    setActiveRange(null)
+    setEndDate(value)
+    setStartDate(prev => (!prev || (value && prev > value)) ? value : prev)
+  }, [])
+
+  const applyQuickRange = useCallback((range: QuickRange) => {
+    if (normalizedSeries.length === 0) return
+    const firstDate = parseISO(normalizedSeries[0].date)
+    const lastDate = parseISO(normalizedSeries[normalizedSeries.length - 1].date)
+    if (range === "ALL") {
+      setStartDate(format(firstDate, "yyyy-MM-dd"))
       setEndDate(format(lastDate, "yyyy-MM-dd"))
       setActiveRange(range)
-    },
-    [normalizedSeries]
-  )
-  const clearSelection = useCallback(() => {
-    if (normalizedSeries.length === 0) {
       return
     }
+    let computedStart = firstDate
+    if (range === "1M") computedStart = subMonths(lastDate, 1)
+    else if (range === "3M") computedStart = subMonths(lastDate, 3)
+    else if (range === "6M") computedStart = subMonths(lastDate, 6)
+    else if (range === "1A") computedStart = subYears(lastDate, 1)
+    if (computedStart < firstDate) computedStart = firstDate
+    setStartDate(format(computedStart, "yyyy-MM-dd"))
+    setEndDate(format(lastDate, "yyyy-MM-dd"))
+    setActiveRange(range)
+  }, [normalizedSeries])
+
+  const clearSelection = useCallback(() => {
+    if (normalizedSeries.length === 0) return
     setStartDate(normalizedSeries[0].date)
     setEndDate(normalizedSeries[normalizedSeries.length - 1].date)
     setActiveRange(null)
-    setSelectionStartIndex(null)
-    setSelectionEndIndex(null)
   }, [normalizedSeries])
+
   if (normalizedSeries.length === 0) {
     return (
       <div className="flex h-80 w-full items-center justify-center rounded-md border border-dashed border-muted-foreground/40 text-sm text-muted-foreground">
@@ -564,13 +228,12 @@ export const BalanceChart = (props: { series: BalancePoint[] }) => {
       </div>
     )
   }
+
   const quickRanges: QuickRange[] = ["1M", "3M", "6M", "1A", "ALL"]
   const hasRangeFilter = customRangeActive || activeRange !== null
+
   return (
-    <article
-      ref={containerRef}
-      className="relative flex w-full flex-col gap-5 overflow-visible rounded-2xl border border-border/70 bg-black/40 p-4 shadow-sm backdrop-blur-xl sm:p-5 lg:gap-6 lg:p-6"
-    >
+    <article className="relative flex w-full flex-col gap-5 overflow-visible rounded-2xl border border-border/70 bg-black/40 p-4 shadow-sm backdrop-blur-xl sm:p-5 lg:gap-6 lg:p-6">
       <header className="flex flex-col gap-4 lg:gap-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between lg:gap-4">
           <div className="flex flex-col gap-1">
@@ -608,9 +271,10 @@ export const BalanceChart = (props: { series: BalancePoint[] }) => {
               className={cn(
                 "h-8 rounded-full border px-3 text-xs font-semibold transition lg:h-9 lg:px-4",
                 hasRangeFilter
-                  ? "border-primary/60 bg-primary/10 text-primary hover:bg-primary/20"
+                  ? "border-primary/60 bg-primary/10 hover:bg-primary/20"
                   : "border-dashed border-border text-muted-foreground"
               )}
+              style={hasRangeFilter ? { color: userColor, borderColor: userColor + '99' } : {}}
             >
               Limpar
             </Button>
@@ -626,8 +290,9 @@ export const BalanceChart = (props: { series: BalancePoint[] }) => {
               type="date"
               className={cn(
                 "h-10 rounded-2xl border border-border bg-background/80 text-sm transition focus-visible:ring-0 sm:w-40 lg:h-11 lg:w-48",
-                startDate && "border-primary/60 bg-primary/5 text-foreground shadow-sm"
+                startDate && "text-foreground shadow-sm"
               )}
+              style={startDate ? { borderColor: userColor + '99', backgroundColor: userColor + '0D' } : {}}
               value={startDate}
               min={minDate}
               max={endDate || maxDate}
@@ -643,8 +308,9 @@ export const BalanceChart = (props: { series: BalancePoint[] }) => {
               type="date"
               className={cn(
                 "h-10 rounded-2xl border border-border bg-background/80 text-sm transition focus-visible:ring-0 sm:w-40 lg:h-11 lg:w-48",
-                endDate && "border-primary/60 bg-primary/5 text-foreground shadow-sm"
+                endDate && "text-foreground shadow-sm"
               )}
+              style={endDate ? { borderColor: userColor + '99', backgroundColor: userColor + '0D' } : {}}
               value={endDate}
               min={startDate || minDate}
               max={maxDate}
@@ -654,171 +320,77 @@ export const BalanceChart = (props: { series: BalancePoint[] }) => {
         </div>
       </header>
 
-      <section className="relative flex flex-col gap-3 lg:gap-4" aria-label="Gráfico de evolução do saldo">
-        <div className="relative -mx-4 w-[calc(100%+2rem)] sm:-mx-5 sm:w-[calc(100%+2.5rem)] lg:-mx-6 lg:w-[calc(100%+3rem)]">
-          {variationSummary && (
-            <aside className="pointer-events-none absolute right-3 top-2 z-20 min-w-[140px] rounded-xl border border-border/70 bg-background/90 px-3 py-2.5 text-right shadow-lg backdrop-blur sm:right-4 sm:min-w-[160px] sm:rounded-2xl sm:px-4 sm:py-3 lg:right-5">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:text-[11px]">Variação</p>
-              <p
-                className={cn(
-                  "text-base font-semibold sm:text-lg lg:text-xl",
-                  variationSummary.change >= 0 ? "text-emerald-400" : "text-destructive"
-                )}
-              >
-                {formatSignedCurrency(variationSummary.change)}
-              </p>
-              {variationSummary.percentChange !== null && (
-                <p className="text-xs font-medium text-foreground sm:text-sm">{formatSignedPercent(variationSummary.percentChange)}</p>
-              )}
-              <p className="text-[10px] text-muted-foreground sm:text-[11px]">
-                {format(parseISO(variationSummary.startDate), "dd/MM")} — {format(parseISO(variationSummary.endDate), "dd/MM")}
-              </p>
-            </aside>
-          )}
+      <section className="relative" aria-label="Gráfico de evolução do saldo">
+        {variationSummary && (
+          <aside className="pointer-events-none absolute right-3 top-2 z-20 min-w-[140px] rounded-xl border border-border/70 bg-background/90 px-3 py-2.5 text-right shadow-lg backdrop-blur sm:right-4 sm:min-w-[160px] sm:rounded-2xl sm:px-4 sm:py-3 lg:right-5">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:text-[11px]">Variação</p>
+            <p className={cn("text-base font-semibold sm:text-lg lg:text-xl", variationSummary.change >= 0 ? "text-emerald-400" : "text-destructive")}>
+              {formatSignedCurrency(variationSummary.change)}
+            </p>
+            {variationSummary.percentChange !== null && (
+              <p className="text-xs font-medium text-foreground sm:text-sm">{formatSignedPercent(variationSummary.percentChange)}</p>
+            )}
+            <p className="text-[10px] text-muted-foreground sm:text-[11px]">
+              {format(parseISO(variationSummary.startDate), "dd/MM")} — {format(parseISO(variationSummary.endDate), "dd/MM")}
+            </p>
+          </aside>
+        )}
 
-          <svg
-            ref={svgRef}
-            viewBox={`0 0 ${width} ${height}`}
-            preserveAspectRatio="xMidYMid meet"
-            className="w-full text-primary"
-            style={{ aspectRatio: `${width} / ${height}`, minHeight: '280px', maxHeight: '400px' }}
-            aria-label="Evolução do saldo ao longo do tempo"
-            role="img"
-            onPointerMove={handlePointerMove}
-            onPointerDown={handlePointerDown}
-            onPointerLeave={handlePointerLeave}
-            onPointerUp={handlePointerUp}
-            onPointerCancel={handlePointerUp}
-          >
+        <ResponsiveContainer width="100%" height={320}>
+          <AreaChart data={chartData} margin={{ top: 20, right: 20, bottom: 20, left: 0 }}>
             <defs>
-              <linearGradient id="balance-gradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity="0.3" />
-                <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity="0" />
+              <linearGradient id="balanceGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={userColor} stopOpacity={0.3} />
+                <stop offset="100%" stopColor={userColor} stopOpacity={0} />
               </linearGradient>
             </defs>
-            {yScale && (
-              <g>
-                {yScale.ticks.map((value, index) => {
-                  const position =
-                    chartPadding.top +
-                    innerHeight -
-                    ((value - yScale.min) / yScale.range) * innerHeight
-                  const isZero = Math.abs(value) < 0.0001
-                  return (
-                    <g key={`${value}-${index}`}>
-                      <line
-                        x1={chartPadding.left}
-                        x2={width - chartPadding.right}
-                        y1={position}
-                        y2={position}
-                        stroke="hsl(var(--border))"
-                        strokeWidth={isZero ? 2 : 1}
-                        strokeDasharray={isZero ? undefined : "2 6"}
-                        opacity={isZero ? 0.8 : 0.25}
-                      />
-                      <text
-                        x={chartPadding.left - 12}
-                        y={position}
-                        fill="hsl(var(--muted-foreground))"
-                        fontSize={11}
-                        textAnchor="end"
-                        dominantBaseline="middle"
-                      >
-                        {formatBalance(value)}
-                      </text>
-                    </g>
-                  )
-                })}
-              </g>
-            )}
-            {selectionOverlay && (
-              <>
-                <rect
-                  x={selectionOverlay.x}
-                  y={selectionOverlay.y}
-                  width={selectionOverlay.width}
-                  height={selectionOverlay.height}
-                  fill="hsl(var(--primary))"
-                  opacity={0.12}
-                />
-                <line
-                  x1={selectionOverlay.x}
-                  x2={selectionOverlay.x}
-                  y1={selectionOverlay.y}
-                  y2={selectionOverlay.y + selectionOverlay.height}
-                  stroke="hsl(var(--primary))"
-                  strokeWidth={2}
-                  opacity={0.4}
-                />
-                <line
-                  x1={selectionOverlay.x + selectionOverlay.width}
-                  x2={selectionOverlay.x + selectionOverlay.width}
-                  y1={selectionOverlay.y}
-                  y2={selectionOverlay.y + selectionOverlay.height}
-                  stroke="hsl(var(--primary))"
-                  strokeWidth={2}
-                  opacity={0.4}
-                />
-              </>
-            )}
-            <path d={area} fill="url(#balance-gradient)" />
-            <path d={path} fill="none" stroke="hsl(var(--primary))" strokeWidth={3} strokeLinecap="round" />
-            {hoverData && (
-              <>
-                <line
-                  x1={hoverData.x}
-                  x2={hoverData.x}
-                  y1={chartPadding.top}
-                  y2={chartPadding.top + innerHeight}
-                  stroke="hsl(var(--primary))"
-                  strokeWidth={1}
-                  strokeDasharray="4 4"
-                />
-                <circle cx={hoverData.x} cy={hoverData.y} r={5} fill="hsl(var(--primary))" />
-                <circle cx={hoverData.x} cy={hoverData.y} r={10} fill="hsl(var(--primary))" opacity={0.2} />
-              </>
-            )}
-          </svg>
-
-          {hoverData && tooltipPosition && (
-            <div
-              className="pointer-events-none absolute z-30 min-w-[160px] rounded-lg border border-border bg-black/80 px-3 py-2.5 shadow-xl backdrop-blur sm:min-w-[180px] sm:px-4 sm:py-3 lg:min-w-[200px]"
-              style={tooltipPosition}
-              role="tooltip"
-            >
-              <div className="text-[10px] font-semibold uppercase text-muted-foreground sm:text-[11px]">
-                {format(parseISO(hoverData.point.date), "dd/MM/yyyy")}
-              </div>
-              <div className="mt-1 text-sm font-semibold text-foreground lg:text-base">
-                {formatBalance(hoverData.point.balance)}
-              </div>
-              <div className="mt-1.5 flex items-center justify-between gap-3 text-[10px] sm:mt-2 sm:text-[11px]">
-                <span className="text-muted-foreground">Variação</span>
-                <span className={cn("font-medium", hoverData.change >= 0 ? "text-emerald-400" : "text-destructive")}>
-                  {formatSignedCurrency(hoverData.change)}
-                </span>
-              </div>
-              {hoverData.percentChange !== null && (
-                <div className="mt-1 flex items-center justify-between gap-3 text-[10px] sm:text-[11px]">
-                  <span className="text-muted-foreground">Percentual</span>
-                  <span className={cn("font-medium", hoverData.percentChange >= 0 ? "text-emerald-400" : "text-destructive")}>
-                    {formatSignedPercent(hoverData.percentChange)}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} vertical={false} />
+            <XAxis
+              dataKey="date"
+              tickFormatter={(value) => format(parseISO(value), "dd/MM")}
+              stroke="hsl(var(--muted-foreground))"
+              fontSize={11}
+              tickLine={false}
+              axisLine={false}
+              dy={10}
+            />
+            <YAxis
+              tickFormatter={formatAxisLabel}
+              stroke="hsl(var(--muted-foreground))"
+              fontSize={11}
+              tickLine={false}
+              axisLine={false}
+              dx={-5}
+              width={45}
+            />
+            <Tooltip content={<CustomTooltip userColor={userColor} />} />
+            <ReferenceLine y={0} stroke="hsl(var(--border))" strokeWidth={2} opacity={0.8} />
+            <Area
+              type="monotone"
+              dataKey="balance"
+              stroke={userColor}
+              strokeWidth={2.5}
+              fill="url(#balanceGradient)"
+              dot={false}
+              activeDot={{ r: 6, fill: userColor, stroke: "hsl(var(--background))", strokeWidth: 2 }}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
 
         <footer className="flex justify-between px-4 text-[10px] font-medium uppercase tracking-wide text-muted-foreground sm:px-5 sm:text-[11px] lg:px-6" aria-label="Eixo de datas">
-          {labels.map(label => (
-            <time key={label} dateTime={label}>
-              {format(parseISO(label), "dd/MM")}
+          <time dateTime={filteredSeries[0]?.date}>
+            {filteredSeries[0] && format(parseISO(filteredSeries[0].date), "dd/MM")}
+          </time>
+          {filteredSeries.length > 2 && (
+            <time dateTime={filteredSeries[Math.floor(filteredSeries.length / 2)]?.date}>
+              {format(parseISO(filteredSeries[Math.floor(filteredSeries.length / 2)].date), "dd/MM")}
             </time>
-          ))}
+          )}
+          <time dateTime={filteredSeries[filteredSeries.length - 1]?.date}>
+            {filteredSeries[filteredSeries.length - 1] && format(parseISO(filteredSeries[filteredSeries.length - 1].date), "dd/MM")}
+          </time>
         </footer>
       </section>
     </article>
   )
 }
-

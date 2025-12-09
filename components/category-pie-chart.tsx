@@ -1,7 +1,5 @@
-"use client"
-
 import { useCallback, useMemo, useRef, useState } from "react"
-import { cn } from "@/components/ui/utils"
+import { cn, getUserColors } from "@/components/ui/utils"
 
 type CategoryTotal = {
   category: string
@@ -11,16 +9,7 @@ type CategoryTotal = {
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value)
 
-const colors = [
-  "hsl(var(--primary))",
-  "hsl(142, 71%, 45%)",
-  "hsl(199, 89%, 48%)",
-  "hsl(43, 96%, 56%)",
-  "hsl(330, 81%, 60%)",
-  "hsl(280, 100%, 70%)",
-  "hsl(0, 72%, 51%)",
-  "hsl(210, 100%, 56%)"
-]
+const colors = getUserColors()
 
 const calculatePieSlice = (
   startAngle: number,
