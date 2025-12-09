@@ -70,6 +70,7 @@ export type Database = {
           id: string
           paid_by: string
           participants: string[] | null
+          is_hidden: boolean
         }
         Insert: {
           amount?: number | null
@@ -81,6 +82,7 @@ export type Database = {
           id?: string
           paid_by: string
           participants?: string[] | null
+          is_hidden?: boolean
         }
         Update: {
           amount?: number | null
@@ -92,6 +94,7 @@ export type Database = {
           id?: string
           paid_by?: string
           participants?: string[] | null
+          is_hidden?: boolean
         }
         Relationships: []
       }

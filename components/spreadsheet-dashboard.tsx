@@ -204,6 +204,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
   const filteredTransactions = useMemo(() => {
     // First filter by user involvement (paid or participated)
     const userTransactions = transactions.filter(t => {
+      if (currentUser === "Antônio") return true
       const isPayer = t.paid_by === currentUser
       const isParticipant = (t.participants ?? []).includes(currentUser)
       return isPayer || isParticipant
@@ -618,9 +619,24 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
   }
 
   const handleDelete = async (transactionId: string) => {
+    const transaction = transactions.find(t => t.id === transactionId)
+    if (!transaction) return
+
+    const isAntonio = currentUser === "Antônio"
+    const isPayer = transaction.paid_by === currentUser
+
+    if (!isAntonio && !isPayer) {
+      setError("Você só pode deletar transações que você pagou.")
+      return
+    }
+
     setDeletePendingId(transactionId)
     setError(null)
-    const { error: deleteError } = await supabase.from("shared_transactions").delete().eq("id", transactionId)
+    const { error: deleteError } = await supabase
+      .from("shared_transactions")
+      .update({ is_hidden: true })
+      .eq("id", transactionId)
+
     if (deleteError) {
       setError(deleteError.message)
       setDeletePendingId(null)
@@ -798,6 +814,16 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
     if (selectedRows.length === 0) {
       return
     }
+
+    const transactionsToDelete = transactions.filter(t => selectedRows.includes(t.id))
+    const isAntonio = currentUser === "Antônio"
+    const unauthorized = transactionsToDelete.filter(t => !isAntonio && t.paid_by !== currentUser)
+
+    if (unauthorized.length > 0) {
+      setBulkError(`Você não pode deletar ${unauthorized.length} transações selecionadas pois não foi você quem pagou.`)
+      return
+    }
+
     setBulkPending(true)
     setBulkError(null)
     const { error } = await bulkDeleteByIds("shared_transactions", selectedRows)
@@ -1861,7 +1887,10 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                                 size="icon"
                                 onClick={() => handleEdit(transaction)}
                                 aria-label="Editar transação"
-                                className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted"
+                                className={cn(
+                                  "h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted",
+                                  !(currentUser === "Antônio" || transaction.paid_by === currentUser) && "hidden"
+                                )}
                               >
                                 <Pencil className="h-3.5 w-3.5" />
                               </Button>
@@ -1872,7 +1901,10 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                                 onClick={() => handleDelete(transaction.id)}
                                 disabled={deletePendingId === transaction.id}
                                 aria-label="Excluir transação"
-                                className="h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                className={cn(
+                                  "h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10",
+                                  !(currentUser === "Antônio" || transaction.paid_by === currentUser) && "hidden"
+                                )}
                               >
                                 {deletePendingId === transaction.id ? (
                                   <Loader2 className="h-3.5 w-3.5 animate-spin" />

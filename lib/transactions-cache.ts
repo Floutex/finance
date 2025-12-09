@@ -60,6 +60,7 @@ export async function fetchTransactions(): Promise<Transaction[]> {
             const { data, error } = await supabase
                 .from("shared_transactions")
                 .select("*")
+                .eq("is_hidden", false)
                 .order("date", { ascending: false })
                 .order("created_at", { ascending: false })
 
