@@ -23,6 +23,7 @@ import {
   ChevronUp,
   ChevronsUpDown,
   FilterX,
+  HandCoins,
   Image as ImageIcon,
   Loader2,
   Pencil,
@@ -64,6 +65,13 @@ type FormState = {
   participants: string[]
 }
 
+type RequestFormState = {
+  description: string
+  amount: string
+  date: string
+  pix: string
+}
+
 type ExtractedTransaction = {
   description: string
   date: string
@@ -72,6 +80,11 @@ type ExtractedTransaction = {
   paid_by: string
   category: string
 }
+
+const WEBHOOK_URL = "https://services.leadconnectorhq.com/hooks/YUrVxIRna26XgFlMZ5Kb/webhook-trigger/271d92d0-98e4-4470-a80d-2d84ee39bfb3"
+const WEBHOOK_PAID_URL = "https://services.leadconnectorhq.com/hooks/YUrVxIRna26XgFlMZ5Kb/webhook-trigger/ibgaGAOLqrt88ldqEUgk"
+
+const PENDING_MARKER = "__PENDENTE__"
 
 const initialFormState = (defaultPayer: string = ""): FormState => {
   const today = new Date().toISOString().slice(0, 10)
@@ -144,6 +157,13 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
   const tableCaptionId = "transactions-table-caption"
   const tableSummaryId = "transactions-table-summary"
 
+  // Money Request state
+  const [requestDialogOpen, setRequestDialogOpen] = useState(false)
+  const [requestForm, setRequestForm] = useState<RequestFormState>({ description: "", amount: "", date: new Date().toISOString().slice(0, 10), pix: "" })
+  const [requestPending, setRequestPending] = useState(false)
+  const [markingPaidId, setMarkingPaidId] = useState<string | null>(null)
+  const requestFirstFieldRef = useRef<HTMLInputElement>(null)
+
   // Helper to clear local error
   const setError = (err: string | null) => setLocalError(err)
 
@@ -201,19 +221,29 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
     }
   }, [uploadDialogOpen])
 
-  const filteredTransactions = useMemo(() => {
-    // First filter by user involvement (paid or participated)
-    const userTransactions = transactions.filter(t => {
+  // Pending money requests (visible to all)
+  const pendingRequests = useMemo(() => {
+    return transactions.filter(t => t.paid_by === PENDING_MARKER)
+  }, [transactions])
+
+  const userTransactions = useMemo(() => {
+    return transactions.filter(t => {
+      // Skip pending requests — they are shown separately
+      if (t.paid_by === PENDING_MARKER) return false
+      // Antônio vê tudo (admin/dev mode implied)
       if (currentUser === "Antônio") return true
       const isPayer = t.paid_by === currentUser
       const isParticipant = (t.participants ?? []).includes(currentUser)
       return isPayer || isParticipant
     })
+  }, [transactions, currentUser])
 
-    // Then apply search and date filters
+  const filteredTransactions = useMemo(() => {
+    // Apply search and date filters
     const searchValue = search.trim().toLowerCase()
     const start = startDate ? parseISO(startDate) : null
     const end = endDate ? parseISO(endDate) : null
+
     return userTransactions.filter(transaction => {
       const matchesSearch =
         !searchValue ||
@@ -228,7 +258,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
       const beforeEnd = end ? transactionDate <= end : true
       return afterStart && beforeEnd
     })
-  }, [transactions, currentUser, search, startDate, endDate])
+  }, [userTransactions, search, startDate, endDate])
 
   const sortedTransactions = useMemo(() => {
     const copy = [...filteredTransactions]
@@ -349,31 +379,37 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
     return sortedTransactions.reduce((total, transaction) => total + (transaction.amount_owed ?? 0), 0)
   }, [sortedTransactions])
 
-  const totalAmount = useMemo(() => {
-    return sortedTransactions.reduce((total, transaction) => {
+  const periodStats = useMemo(() => {
+    let mySpend = 0
+    let totalSpend = 0
+    sortedTransactions.forEach(transaction => {
+      totalSpend += (transaction.amount ?? 0)
       if (transaction.paid_by === currentUser) {
-        return total + (transaction.amount ?? 0)
+        mySpend += (transaction.amount ?? 0)
       }
-      return total
-    }, 0)
+    })
+    return { mySpend, totalSpend }
   }, [sortedTransactions, currentUser])
 
   const currentMonthStats = useMemo(() => {
     const currentDate = new Date()
-    let total = 0
-    let totalAmountInMonth = 0
+    let mySpend = 0
+    let totalSpend = 0
     let count = 0
-    sortedTransactions.forEach(transaction => {
+
+    // Usa userTransactions para garantir que mostramos o mês atual
+    // independentemente dos filtros de data selecionados na tabela
+    userTransactions.forEach(transaction => {
       if (isSameMonth(parseISO(transaction.date), currentDate)) {
-        total += transaction.amount_owed ?? 0
+        totalSpend += (transaction.amount ?? 0)
         if (transaction.paid_by === currentUser) {
-          totalAmountInMonth += (transaction.amount ?? 0)
+          mySpend += (transaction.amount ?? 0)
         }
         count += 1
       }
     })
-    return { total, totalAmountInMonth, count }
-  }, [sortedTransactions, currentUser])
+    return { mySpend, totalSpend, count }
+  }, [userTransactions, currentUser])
 
   const categoryTotals = useMemo(() => {
     const map = new Map<string, number>()
@@ -470,6 +506,153 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
   }, [myDebts, currentUser])
 
 
+  // ---- Money Request handlers ----
+
+  useEffect(() => {
+    if (!requestDialogOpen) return
+    const frame = requestAnimationFrame(() => {
+      requestFirstFieldRef.current?.focus()
+    })
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    return () => {
+      cancelAnimationFrame(frame)
+      document.body.style.overflow = previousOverflow
+    }
+  }, [requestDialogOpen])
+
+  const handleOpenRequestDialog = () => {
+    setRequestForm({ description: "", amount: "", date: new Date().toISOString().slice(0, 10), pix: "" })
+    setError(null)
+    setRequestDialogOpen(true)
+  }
+
+  const handleCloseRequestDialog = () => {
+    if (requestPending) return
+    setRequestDialogOpen(false)
+    setError(null)
+    setRequestForm({ description: "", amount: "", date: new Date().toISOString().slice(0, 10), pix: "" })
+  }
+
+  const handleRequestDialogKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape" && !requestPending) {
+      event.stopPropagation()
+      handleCloseRequestDialog()
+    }
+  }
+
+  const requestAmountValue = useMemo(() => normalizeNumber(requestForm.amount), [requestForm.amount])
+  const isRequestFormValid = useMemo(() => {
+    return requestForm.description.trim().length > 0 && requestAmountValue !== null && requestForm.date.length > 0
+  }, [requestForm, requestAmountValue])
+
+  const handleSubmitRequest = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setRequestPending(true)
+    setError(null)
+
+    const amountVal = requestAmountValue
+    if (amountVal === null) {
+      setError("Valor inválido")
+      setRequestPending(false)
+      return
+    }
+
+    // 1. Create the transaction in Supabase with paid_by = PENDING_MARKER
+    const description = `💰 ${requestForm.description.trim()}${requestForm.pix.trim() ? ` | PIX: ${requestForm.pix.trim()}` : ""}`
+    const payload: TransactionInsert = {
+      description: description,
+      category: "Solicitação",
+      paid_by: PENDING_MARKER,
+      date: requestForm.date,
+      amount: amountVal,
+      participants: [currentUser]
+    }
+    const { data, error: insertError } = await supabase
+      .from("shared_transactions")
+      .insert(payload)
+      .select("*")
+      .single()
+    if (insertError) {
+      setError(insertError.message)
+      setRequestPending(false)
+      return
+    }
+    if (data) {
+      updateCache(previous => [data, ...previous])
+    }
+
+    // 2. Send the webhook (fire and forget, don't block the UX)
+    try {
+      await fetch(WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "money_request",
+          requested_by: currentUser,
+          description: requestForm.description.trim(),
+          pix: requestForm.pix.trim(),
+          amount: amountVal,
+          date: requestForm.date,
+          transaction_id: data?.id ?? null,
+          timestamp: new Date().toISOString()
+        })
+      })
+    } catch {
+      // Webhook failure is non-blocking
+    }
+
+    setRequestForm({ description: "", amount: "", date: new Date().toISOString().slice(0, 10), pix: "" })
+    setRequestDialogOpen(false)
+    setRequestPending(false)
+  }
+
+  const handleMarkAsPaid = async (transactionId: string) => {
+    setMarkingPaidId(transactionId)
+    setError(null)
+    const updatePayload: TransactionUpdate = {
+      paid_by: currentUser,
+    }
+    const { data, error: updateError } = await supabase
+      .from("shared_transactions")
+      .update(updatePayload)
+      .eq("id", transactionId)
+      .select("*")
+      .single()
+    if (updateError) {
+      setError(updateError.message)
+      setMarkingPaidId(null)
+      return
+    }
+    if (data) {
+      updateCache(previous =>
+        previous.map(item => {
+          if (item.id === transactionId) return data
+          return item
+        })
+      )
+
+      // Send webhook notification for payment
+      try {
+        await fetch(WEBHOOK_PAID_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "money_request_paid",
+            paid_by: currentUser,
+            requested_by: (data.participants ?? [])[0] ?? "Desconhecido",
+            transaction_id: transactionId,
+            description: data.description,
+            amount: data.amount,
+            timestamp: new Date().toISOString()
+          })
+        })
+      } catch {
+        // Webhook failure is non-blocking
+      }
+    }
+    setMarkingPaidId(null)
+  }
 
   const handleSortToggle = (field: SortField) => {
     setCurrentPage(1)
@@ -909,6 +1092,88 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
   return (
     <div className="space-y-8">
 
+      {/* ── Solicitação de Dinheiro Section ── */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <HandCoins className="h-5 w-5 text-amber-400" />
+            <h2 className="text-lg font-semibold text-amber-400">Solicitações de Dinheiro</h2>
+            {pendingRequests.length > 0 && (
+              <span className="ml-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-amber-500/20 text-xs font-bold text-amber-400">
+                {pendingRequests.length}
+              </span>
+            )}
+          </div>
+          <Button
+            type="button"
+            onClick={handleOpenRequestDialog}
+            className="h-9 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 px-5 text-sm font-semibold text-white shadow-sm transition-all hover:from-amber-500 hover:to-amber-400 hover:shadow-amber-500/20"
+          >
+            <HandCoins className="mr-2 h-4 w-4" />
+            Solicitar Dinheiro
+          </Button>
+        </div>
+        {pendingRequests.length > 0 ? (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {pendingRequests.map(request => (
+              <div
+                key={request.id}
+                className="group relative overflow-hidden rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-500/5 via-black/40 to-black/40 p-5 shadow-lg backdrop-blur-xl transition-all duration-300 hover:border-amber-500/40 hover:shadow-amber-500/5"
+              >
+                <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                <div className="relative space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate">{request.description}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Solicitado por{" "}
+                        <span className={cn(
+                          "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
+                          getUserColorClasses((request.participants ?? [])[0] ?? "")
+                        )}>
+                          {(request.participants ?? [])[0] ?? "—"}
+                        </span>
+                      </p>
+                    </div>
+                    <p className="text-lg font-bold text-amber-400 whitespace-nowrap">
+                      {request.amount !== null ? formatCurrency(request.amount) : "—"}
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground">
+                      {format(parseISO(request.date), "dd/MM/yyyy")}
+                    </p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => handleMarkAsPaid(request.id)}
+                      disabled={markingPaidId === request.id}
+                      className="h-8 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 px-4 text-xs font-semibold text-white shadow-sm transition-all hover:from-green-500 hover:to-emerald-500 hover:shadow-green-500/20"
+                    >
+                      {markingPaidId === request.id ? (
+                        <>
+                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                          Processando...
+                        </>
+                      ) : (
+                        <>
+                          <Check className="mr-1.5 h-3.5 w-3.5" />
+                          Marcar como Pago
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-amber-500/20 bg-black/20 p-6 text-center backdrop-blur-sm">
+            <p className="text-sm text-muted-foreground">Nenhuma solicitação pendente no momento.</p>
+          </div>
+        )}
+      </section>
+
       <section className="grid gap-4 md:grid-cols-3">
         <Card className="md:col-span-2">
           <CardHeader className="space-y-1">
@@ -938,25 +1203,43 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
         <Card>
           <CardHeader className="space-y-1">
             <CardTitle>Total gasto</CardTitle>
-            <p className="text-sm text-muted-foreground">Soma dos valores totais no período visível</p>
+            <p className="text-sm text-muted-foreground">Gastos no período visível</p>
           </CardHeader>
-          <CardContent className="space-y-2">
-            <p className="text-3xl font-semibold">{formatCurrency(totalAmount)}</p>
+          <CardContent className="space-y-4">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Você pagou</p>
+              <p className="text-2xl font-semibold">{formatCurrency(periodStats.mySpend)}</p>
+            </div>
+            <div className="pt-2 border-t border-border/50">
+              <p className="text-xs font-medium text-muted-foreground">Total das transações</p>
+              <p className="text-lg text-muted-foreground">{formatCurrency(periodStats.totalSpend)}</p>
+            </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="space-y-1">
-            <CardTitle>{`Total gasto em ${monthLabel}`}</CardTitle>
-            <p className="text-sm text-muted-foreground">Soma de valores totais no mês atual</p>
+            <CardTitle>{`Em ${monthLabel}`}</CardTitle>
+            <p className="text-sm text-muted-foreground">Visão geral do mês atual</p>
           </CardHeader>
-          <CardContent className="space-y-2">
-            <p className="text-3xl font-semibold">{formatCurrency(currentMonthStats.totalAmountInMonth)}</p>
-            <p className="text-sm text-muted-foreground">
-              {currentMonthStats.count === 1
-                ? "1 lançamento no mês"
-                : `${currentMonthStats.count} lançamentos no mês`}
-            </p>
+          <CardContent className="space-y-4">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Você pagou</p>
+              <p className="text-2xl font-semibold">{formatCurrency(currentMonthStats.mySpend)}</p>
+            </div>
+            <div className="pt-2 border-t border-border/50">
+              <div className="flex justify-between items-baseline">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">Total das transações</p>
+                  <p className="text-lg text-muted-foreground">{formatCurrency(currentMonthStats.totalSpend)}</p>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {currentMonthStats.count === 1
+                    ? "1 lança."
+                    : `${currentMonthStats.count} lança.`}
+                </p>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </section>
@@ -1571,6 +1854,18 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                           <Upload className="mr-2 inline h-4 w-4" />
                           Adicionar por imagem
                         </button>
+                        <div className="mx-2 my-1 border-t border-border/50" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAddMenuOpen(false)
+                            handleOpenRequestDialog()
+                          }}
+                          className="w-full px-4 py-2.5 text-left text-sm font-medium text-amber-400 transition-colors hover:bg-amber-500/10"
+                        >
+                          <HandCoins className="mr-2 inline h-4 w-4" />
+                          Solicitar Dinheiro
+                        </button>
                       </div>
                     </>
                   )}
@@ -1924,6 +2219,131 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
           </table>
         </div>
       </section>
+
+      {/* ── Money Request Dialog ── */}
+      {requestDialogOpen && (
+        <div className="fixed inset-0 z-50">
+          <div
+            className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+            onClick={handleCloseRequestDialog}
+            aria-hidden="true"
+          />
+          <div className="relative flex h-full items-center justify-center p-4" onKeyDown={handleRequestDialogKeyDown}>
+            <div
+              className="w-full max-w-lg rounded-2xl border border-amber-500/20 bg-card p-6 shadow-2xl outline-none"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="request-dialog-title"
+              aria-describedby="request-dialog-description"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/10">
+                    <HandCoins className="h-5 w-5 text-amber-400" />
+                  </div>
+                  <p id="request-dialog-title" className="text-lg font-semibold text-foreground">
+                    Solicitar Dinheiro
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleCloseRequestDialog}
+                  disabled={requestPending}
+                  aria-label="Fechar formulário de solicitação"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <p id="request-dialog-description" className="mt-2 text-sm text-muted-foreground">
+                Crie uma solicitação de dinheiro. Qualquer pessoa poderá marcar como pago.
+              </p>
+              <form onSubmit={handleSubmitRequest} className="mt-6 space-y-4" noValidate>
+                <div className="space-y-2">
+                  <Label htmlFor="request-description">Descrição</Label>
+                  <Input
+                    ref={requestFirstFieldRef}
+                    id="request-description"
+                    autoComplete="off"
+                    placeholder="Ex: Aluguel, Conta de luz..."
+                    value={requestForm.description}
+                    onChange={e => setRequestForm(prev => ({ ...prev, description: e.target.value }))}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="request-pix">Chave PIX</Label>
+                  <Input
+                    id="request-pix"
+                    placeholder="CPF, Email, Telefone..."
+                    autoComplete="off"
+                    value={requestForm.pix}
+                    onChange={e => setRequestForm(prev => ({ ...prev, pix: e.target.value }))}
+                  />
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="request-amount">Valor</Label>
+                    <Input
+                      id="request-amount"
+                      autoComplete="off"
+                      inputMode="decimal"
+                      placeholder="0,00"
+                      value={requestForm.amount}
+                      onChange={e => setRequestForm(prev => ({ ...prev, amount: e.target.value }))}
+                      aria-invalid={requestForm.amount.trim().length > 0 && requestAmountValue === null}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="request-date">Data</Label>
+                    <Input
+                      id="request-date"
+                      type="date"
+                      value={requestForm.date}
+                      onChange={e => setRequestForm(prev => ({ ...prev, date: e.target.value }))}
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="rounded-xl border border-border/50 bg-muted/20 p-3">
+                  <p className="text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">Solicitante:</span> {currentUser}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    A solicitação ficará visível para todos. Quem marcar como pago será registrado automaticamente.
+                  </p>
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    type="submit"
+                    disabled={requestPending || !isRequestFormValid}
+                    aria-busy={requestPending}
+                    className="rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 px-6 font-semibold text-white shadow-sm transition-all hover:from-amber-500 hover:to-amber-400 hover:shadow-amber-500/20"
+                  >
+                    {requestPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                        Enviando...
+                      </>
+                    ) : (
+                      <>
+                        <HandCoins className="mr-2 h-4 w-4" aria-hidden="true" />
+                        Solicitar
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </form>
+              {error && (
+                <p className="mt-4 text-sm text-destructive" role="alert">
+                  {error}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {totalPages > 1 && (
         <div className="flex items-center justify-center gap-4 pb-8">

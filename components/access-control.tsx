@@ -80,6 +80,9 @@ export function AccessControl({ onLogin }: AccessControlProps) {
                     <div className="space-y-4">
                         <Input
                             type="password"
+                            name="access_pin"
+                            id="access_pin"
+                            autoComplete="new-password"
                             maxLength={4}
                             value={pin}
                             onChange={handlePinChange}
