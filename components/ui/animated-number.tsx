@@ -8,7 +8,10 @@ interface AnimatedNumberProps {
     formatFn?: (value: number) => string
     className?: string
     duration?: number
+    delay?: number
     containerProps?: React.HTMLAttributes<HTMLSpanElement>
+    animateOnMount?: boolean
+    initialValue?: number
 }
 
 // Easing function: easeOutExpo
@@ -21,15 +24,19 @@ export function AnimatedNumber({
     formatFn = (val) => val.toString(),
     className,
     duration = 800,
-    containerProps
+    delay = 0,
+    containerProps,
+    animateOnMount = false,
+    initialValue = 0
 }: AnimatedNumberProps) {
-    const [displayValue, setDisplayValue] = useState(value)
-    const previousValueRef = useRef(value)
+    const [displayValue, setDisplayValue] = useState(animateOnMount ? initialValue : value)
+    const previousValueRef = useRef(animateOnMount ? initialValue : value)
     const animationRef = useRef<number>()
-    const hasInitialized = useRef(false)
+    const timeoutRef = useRef<NodeJS.Timeout>()
+    const hasInitialized = useRef(animateOnMount)
 
     useEffect(() => {
-        // Immediate set on mount
+        // Immediate set on mount if not animating on mount
         if (!hasInitialized.current) {
             setDisplayValue(value)
             previousValueRef.current = value
@@ -41,39 +48,48 @@ export function AnimatedNumber({
             return
         }
 
-        const startValue = displayValue // Animate from whatever is currently displayed
+        const startValue = previousValueRef.current
         const endValue = value
-        const startTime = performance.now()
 
-        const animate = (currentTime: number) => {
-            const elapsed = currentTime - startTime
-            const progress = Math.min(elapsed / duration, 1)
+        const startAnimation = () => {
+            const startTime = performance.now()
 
-            const easedProgress = easeOutExpo(progress)
-            const currentVal = startValue + (endValue - startValue) * easedProgress
+            const animate = (currentTime: number) => {
+                const elapsed = currentTime - startTime
+                const progress = Math.min(elapsed / duration, 1)
 
-            setDisplayValue(currentVal)
+                const easedProgress = easeOutExpo(progress)
+                const currentVal = startValue + (endValue - startValue) * easedProgress
 
-            if (progress < 1) {
-                animationRef.current = requestAnimationFrame(animate)
-            } else {
-                setDisplayValue(endValue)
-                previousValueRef.current = endValue
+                setDisplayValue(currentVal)
+
+                if (progress < 1) {
+                    animationRef.current = requestAnimationFrame(animate)
+                } else {
+                    setDisplayValue(endValue)
+                    previousValueRef.current = endValue
+                }
             }
-        }
 
-        if (animationRef.current) {
-            cancelAnimationFrame(animationRef.current)
-        }
-
-        animationRef.current = requestAnimationFrame(animate)
-
-        return () => {
             if (animationRef.current) {
                 cancelAnimationFrame(animationRef.current)
             }
+
+            animationRef.current = requestAnimationFrame(animate)
         }
-    }, [value, duration]) // displayValue intentionally omitted from deps to avoid re-triggering animation on every frame
+
+        if (delay > 0) {
+            if (timeoutRef.current) clearTimeout(timeoutRef.current)
+            timeoutRef.current = setTimeout(startAnimation, delay)
+        } else {
+            startAnimation()
+        }
+
+        return () => {
+            if (animationRef.current) cancelAnimationFrame(animationRef.current)
+            if (timeoutRef.current) clearTimeout(timeoutRef.current)
+        }
+    }, [value, duration, delay])
 
     return (
         <span className={cn("tabular-nums", className)} {...containerProps}>

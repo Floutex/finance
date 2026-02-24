@@ -1114,13 +1114,13 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
   return (
     <div className="space-y-8">
 
-      <div className="space-y-6 animate-fade-in">
+      <div className="space-y-6">
         {/* ── Stats Grid ── */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {/* Main Hero Card: Saldo Total */}
           <Card
             variant="highlight"
-            className="relative overflow-hidden md:col-span-2 group"
+            className="relative overflow-hidden md:col-span-2 group animate-scale-in"
           >
             <div className={`absolute -right-6 -top-6 h-32 w-32 rounded-full opacity-10 blur-3xl transition-all duration-500 group-hover:opacity-20 ${totalBalance >= 0 ? "bg-emerald-500" : "bg-red-500"}`} />
 
@@ -1135,6 +1135,8 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                 <AnimatedNumber
                   value={totalBalance}
                   formatFn={formatCurrency}
+                  animateOnMount
+                  duration={1200}
                   className={cn(
                     "text-3xl font-bold tracking-tight transition-all duration-300 md:text-4xl",
                     totalBalance >= 0 ? "text-emerald-500" : "text-red-500"
@@ -1153,7 +1155,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
           </Card>
 
           {/* Pie Chart Card */}
-          <Card className="md:col-span-2 md:row-span-2 flex flex-col overflow-hidden">
+          <Card className="md:col-span-2 md:row-span-2 flex flex-col overflow-hidden animate-blur-in [animation-delay:150ms]">
             <CardHeader className="items-center pb-0">
               <CardTitle className="text-sm font-medium">Gastos por Categoria</CardTitle>
               <CardDescription>Distribuição dos seus pagamentos</CardDescription>
@@ -1164,18 +1166,18 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
               </div>
             </CardContent>
             <div className="flex justify-center gap-2 pb-4 text-xs text-muted-foreground">
-              <span>Total visível: <AnimatedNumber value={totalCategoryAmount} formatFn={formatCurrency} /></span>
+              <span>Total visível: <AnimatedNumber value={totalCategoryAmount} formatFn={formatCurrency} animateOnMount delay={150} /></span>
             </div>
           </Card>
 
           {/* Period Stats: Total Gasto */}
-          <Card>
+          <Card className="animate-slide-right [animation-delay:300ms]">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Total Gasto</CardTitle>
               <TrendingUp className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold"><AnimatedNumber value={periodStats.mySpend} formatFn={formatCurrency} /></div>
+              <div className="text-2xl font-bold"><AnimatedNumber value={periodStats.mySpend} formatFn={formatCurrency} animateOnMount duration={1000} delay={300} /></div>
               <p className="text-xs text-muted-foreground">
                 Você pagou no período selecionado
               </p>
@@ -1186,25 +1188,25 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                 />
               </div>
               <p className="mt-1 text-[10px] text-muted-foreground text-right">
-                {Math.round((periodStats.mySpend / (periodStats.totalSpend || 1)) * 100)}% do total (<AnimatedNumber value={periodStats.totalSpend} formatFn={formatCurrency} />)
+                {Math.round((periodStats.mySpend / (periodStats.totalSpend || 1)) * 100)}% do total (<AnimatedNumber value={periodStats.totalSpend} formatFn={formatCurrency} animateOnMount delay={300} />)
               </p>
             </CardContent>
           </Card>
 
           {/* Current Month Stats */}
-          <Card>
+          <Card className="animate-slide-left [animation-delay:450ms]">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Em {monthLabel}</CardTitle>
               <Calendar className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold"><AnimatedNumber value={currentMonthStats.mySpend} formatFn={formatCurrency} /></div>
+              <div className="text-2xl font-bold"><AnimatedNumber value={currentMonthStats.mySpend} formatFn={formatCurrency} animateOnMount duration={1000} delay={450} /></div>
               <p className="text-xs text-muted-foreground">
                 Seus pagamentos este mês
               </p>
               <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
                 <span>{currentMonthStats.count} lançamentos</span>
-                <span>Total: <AnimatedNumber value={currentMonthStats.totalSpend} formatFn={formatCurrency} /></span>
+                <span>Total: <AnimatedNumber value={currentMonthStats.totalSpend} formatFn={formatCurrency} animateOnMount delay={450} /></span>
               </div>
             </CardContent>
           </Card>
@@ -1212,13 +1214,13 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
 
         {/* ── Charts & Main Visuals ── */}
         <div className="grid gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-3">
+          <div className="lg:col-span-3 animate-rise-up [animation-delay:600ms]">
             <BalanceChart series={chartSeries} currentUser={currentUser} />
           </div>
         </div>
 
         {/* ── Solicitações de Dinheiro (Collapsible/Conditional) ── */}
-        <section className="space-y-4">
+        <section className="space-y-4 animate-slide-up-fade [animation-delay:750ms]">
           {pendingRequests.length > 0 ? (
             <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6 backdrop-blur-sm">
               <div className="flex items-center justify-between mb-4">
@@ -1889,7 +1891,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
         )
       }
 
-      <section className="space-y-6">
+      <section className="space-y-6 animate-fade-in [animation-delay:850ms]">
         <div className="rounded-3xl border border-border/50 bg-black/20 p-6 backdrop-blur-xl">
           <div className="flex flex-col gap-6">
             {/* Search Bar Row */}
