@@ -19,19 +19,32 @@ export default function HomePage() {
       ) : (
         <div className={`min-h-screen transition-colors duration-500 ${getUserGradient(currentUser)}`}>
           <main className="mx-auto flex w-full max-w-[1400px] flex-col gap-8 px-4 py-10">
-            <header className="flex items-center justify-between">
+            <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between animate-slide-up">
               <div className="space-y-1">
-                <h1 className="text-3xl font-bold tracking-tight">Finanças</h1>
+                <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-foreground to-muted-foreground/60 bg-clip-text text-transparent">
+                  {(() => {
+                    const hour = new Date().getHours()
+                    if (hour < 12) return "Bom dia,"
+                    if (hour < 18) return "Boa tarde,"
+                    return "Boa noite,"
+                  })()} {currentUser}
+                </h1>
                 <p className="text-sm text-muted-foreground">
-                  Logado como <span className="font-medium text-foreground">{currentUser}</span>
+                  Visão geral das suas finanças
                 </p>
               </div>
-              <button
-                onClick={() => setCurrentUser(null)}
-                className="text-sm text-muted-foreground hover:text-foreground underline"
-              >
-                Sair
-              </button>
+              <div className="flex items-center gap-4">
+                <div className={`hidden md:flex h-10 w-10 items-center justify-center rounded-full border border-white/10 shadow-inner ${getUserGradient(currentUser)}`}>
+                  <span className="font-bold text-white text-lg">{currentUser.charAt(0)}</span>
+                </div>
+                <button
+                  onClick={() => setCurrentUser(null)}
+                  className="group relative overflow-hidden rounded-full border border-white/10 bg-black/20 px-4 py-2 text-sm font-medium text-muted-foreground transition-all hover:border-white/20 hover:bg-black/40 hover:text-foreground"
+                >
+                  <span className="relative z-10">Sair</span>
+                  <div className="absolute inset-0 -z-10 bg-gradient-to-r from-red-500/0 via-red-500/10 to-red-500/0 opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
+                </button>
+              </div>
             </header>
             <SpreadsheetDashboard currentUser={currentUser} />
           </main>

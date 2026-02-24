@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTransactions } from "@/hooks/use-transactions"
 import { format, isSameMonth, parseISO } from "date-fns"
 import { ptBR } from "date-fns/locale"
@@ -9,13 +9,16 @@ import type { Tables, TablesInsert, TablesUpdate } from "@/lib/database.types"
 import { BalanceChart } from "@/components/balance-chart"
 import { CategoryPieChart } from "@/components/category-pie-chart"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
 import { CategorySelector, PayerSelector } from "@/components/transaction-selectors"
 import { cn, getUserColorClasses } from "@/components/ui/utils"
 import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  Calendar,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -30,12 +33,15 @@ import {
   Plus,
   Save,
   Search,
+  Send,
   Trash2,
+  TrendingUp,
   Upload,
+  Wallet,
   X
 } from "lucide-react"
 
-import { simplifyDebts, type Debt } from "@/lib/debt-simplification"
+import { simplifyDebts } from "@/lib/debt-simplification"
 
 type Transaction = Tables<"shared_transactions">
 type TransactionInsert = TablesInsert<"shared_transactions">
@@ -43,8 +49,8 @@ type TransactionUpdate = TablesUpdate<"shared_transactions">
 
 const PARTICIPANTS = ["Antônio", "Júlia", "Simões", "Pietro"]
 
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value)
+const currencyFormatter = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" })
+const formatCurrency = (value: number) => currencyFormatter.format(value)
 
 const toISODate = (value: string) => {
   try {
@@ -81,8 +87,12 @@ type ExtractedTransaction = {
   category: string
 }
 
-const WEBHOOK_URL = "https://services.leadconnectorhq.com/hooks/YUrVxIRna26XgFlMZ5Kb/webhook-trigger/271d92d0-98e4-4470-a80d-2d84ee39bfb3"
-const WEBHOOK_PAID_URL = "https://services.leadconnectorhq.com/hooks/YUrVxIRna26XgFlMZ5Kb/webhook-trigger/ibgaGAOLqrt88ldqEUgk"
+const WEBHOOK_URLS: Record<string, string> = {
+  "Antônio": "https://services.leadconnectorhq.com/hooks/YUrVxIRna26XgFlMZ5Kb/webhook-trigger/9479827a-15d2-4333-94e1-191bb60427f7",
+  "Júlia": "https://services.leadconnectorhq.com/hooks/YUrVxIRna26XgFlMZ5Kb/webhook-trigger/7e0cf1a9-ddf9-468a-b301-851ac515a4d0",
+  "Pietro": "https://services.leadconnectorhq.com/hooks/YUrVxIRna26XgFlMZ5Kb/webhook-trigger/b9a11147-a9e5-42d5-9c7d-dc1533b1e739",
+  "Simões": "https://services.leadconnectorhq.com/hooks/YUrVxIRna26XgFlMZ5Kb/webhook-trigger/88fae391-8944-46b6-b9af-34bdc9a53ef2"
+}
 
 const PENDING_MARKER = "__PENDENTE__"
 
@@ -275,8 +285,8 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
         return (first.getTime() - second.getTime()) * direction
       }
       if (sortField === "participants") {
-        const first = a.participants ?? []
-        const second = b.participants ?? []
+        const first = [...(a.participants ?? [])]
+        const second = [...(b.participants ?? [])]
         const firstStr = first.sort().join(", ").toLowerCase()
         const secondStr = second.sort().join(", ").toLowerCase()
         if (firstStr < secondStr) return -1 * direction
@@ -450,40 +460,44 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
       return []
     }
 
-    // Get all unique dates from transactions sorted chronologically
-    const allDates = Array.from(
-      new Set(transactions.map(t => t.date))
-    ).sort((a, b) => parseISO(a).getTime() - parseISO(b).getTime())
+    // Sort transactions chronologically
+    const sorted = [...transactions].sort(
+      (a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime()
+    )
 
-    // Calculate cumulative balance at each date
-    return allDates.map(date => {
-      // Get all transactions up to and including this date
-      const transactionsUpToDate = transactions.filter(
-        t => parseISO(t.date).getTime() <= parseISO(date).getTime()
-      )
+    // Calculate incremental balance: for each transaction, compute how it
+    // affects the current user's net balance (positive = owed to user, negative = user owes)
+    let runningBalance = 0
+    const dateBalanceMap = new Map<string, number>()
 
-      // Calculate simplified debts for this point in time
-      const transactionsForDebt = transactionsUpToDate.map(t => ({
-        paid_by: t.paid_by,
-        amount: t.amount ?? 0,
-        participants: t.participants ?? ["Antônio", "Júlia"]
-      }))
+    for (const t of sorted) {
+      const participants = t.participants ?? ["Antônio", "Júlia"]
+      const amount = t.amount ?? 0
+      if (participants.length === 0) continue
 
-      const debts = simplifyDebts(transactionsForDebt)
-      const myDebtsAtDate = debts.filter(d => d.from === currentUser || d.to === currentUser)
+      const sharePerPerson = amount / participants.length
+      const userIsParticipant = participants.includes(currentUser)
+      const userIsPayer = t.paid_by === currentUser
 
-      // Calculate balance at this date
-      const balanceAtDate = myDebtsAtDate.reduce((acc, debt) => {
-        if (debt.from === currentUser) return acc - debt.amount
-        if (debt.to === currentUser) return acc + debt.amount
-        return acc
-      }, 0)
-
-      return {
-        date,
-        balance: Number(balanceAtDate.toFixed(2))
+      if (userIsPayer && userIsParticipant) {
+        // User paid and participates: others owe user their shares
+        runningBalance += amount - sharePerPerson
+      } else if (userIsPayer && !userIsParticipant) {
+        // User paid but doesn't participate: all participants owe user
+        runningBalance += amount
+      } else if (!userIsPayer && userIsParticipant) {
+        // Someone else paid, user participates: user owes their share
+        runningBalance -= sharePerPerson
       }
-    })
+      // else: user is neither payer nor participant — no effect
+
+      dateBalanceMap.set(t.date, runningBalance)
+    }
+
+    return Array.from(dateBalanceMap.entries()).map(([date, balance]) => ({
+      date,
+      balance: Number(balance.toFixed(2))
+    }))
   }, [transactions, currentUser])
 
   const simplifiedDebts = useMemo(() => {
@@ -583,24 +597,27 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
     }
 
     // 2. Send the webhook (fire and forget, don't block the UX)
-    try {
-      await fetch(WEBHOOK_URL, {
+    const webhookPayload = {
+      type: "money_request",
+      requested_by: currentUser,
+      paid_by: "",
+      description: requestForm.description.trim(),
+      pix: requestForm.pix.trim(),
+      amount: amountVal,
+      date: requestForm.date,
+      transaction_id: data?.id ?? null,
+      timestamp: new Date().toISOString()
+    }
+    const targets = PARTICIPANTS.filter(p => p !== currentUser)
+    Promise.all(targets.map(target => {
+      const url = WEBHOOK_URLS[target]
+      if (!url) return Promise.resolve()
+      return fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "money_request",
-          requested_by: currentUser,
-          description: requestForm.description.trim(),
-          pix: requestForm.pix.trim(),
-          amount: amountVal,
-          date: requestForm.date,
-          transaction_id: data?.id ?? null,
-          timestamp: new Date().toISOString()
-        })
-      })
-    } catch {
-      // Webhook failure is non-blocking
-    }
+        body: JSON.stringify(webhookPayload)
+      }).catch(() => { })
+    }))
 
     setRequestForm({ description: "", amount: "", date: new Date().toISOString().slice(0, 10), pix: "" })
     setRequestDialogOpen(false)
@@ -633,23 +650,27 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
       )
 
       // Send webhook notification for payment
-      try {
-        await fetch(WEBHOOK_PAID_URL, {
+      const webhookPayload = {
+        type: "money_request_paid",
+        requested_by: (data.participants ?? [])[0] ?? "Desconhecido",
+        paid_by: currentUser,
+        description: data.description,
+        pix: "",
+        amount: data.amount,
+        date: data.date,
+        transaction_id: transactionId,
+        timestamp: new Date().toISOString()
+      }
+
+      Promise.all(PARTICIPANTS.map(target => {
+        const url = WEBHOOK_URLS[target]
+        if (!url) return Promise.resolve()
+        return fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            type: "money_request_paid",
-            paid_by: currentUser,
-            requested_by: (data.participants ?? [])[0] ?? "Desconhecido",
-            transaction_id: transactionId,
-            description: data.description,
-            amount: data.amount,
-            timestamp: new Date().toISOString()
-          })
-        })
-      } catch {
-        // Webhook failure is non-blocking
-      }
+          body: JSON.stringify(webhookPayload)
+        }).catch(() => { })
+      }))
     }
     setMarkingPaidId(null)
   }
@@ -1092,161 +1113,290 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
   return (
     <div className="space-y-8">
 
-      {/* ── Solicitação de Dinheiro Section ── */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <HandCoins className="h-5 w-5 text-amber-400" />
-            <h2 className="text-lg font-semibold text-amber-400">Solicitações de Dinheiro</h2>
-            {pendingRequests.length > 0 && (
-              <span className="ml-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-amber-500/20 text-xs font-bold text-amber-400">
-                {pendingRequests.length}
-              </span>
-            )}
-          </div>
-          <Button
-            type="button"
-            onClick={handleOpenRequestDialog}
-            className="h-9 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 px-5 text-sm font-semibold text-white shadow-sm transition-all hover:from-amber-500 hover:to-amber-400 hover:shadow-amber-500/20"
+      <div className="space-y-6 animate-fade-in">
+        {/* ── Stats Grid ── */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {/* Main Hero Card: Saldo Total */}
+          <Card
+            variant="highlight"
+            className="relative overflow-hidden md:col-span-2 group"
           >
-            <HandCoins className="mr-2 h-4 w-4" />
-            Solicitar Dinheiro
-          </Button>
+            <div className={`absolute -right-6 -top-6 h-32 w-32 rounded-full opacity-10 blur-3xl transition-all duration-500 group-hover:opacity-20 ${totalBalance >= 0 ? "bg-emerald-500" : "bg-red-500"}`} />
+
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Saldo Total
+              </CardTitle>
+              <Wallet className={`h-4 w-4 ${totalBalance >= 0 ? "text-emerald-500" : "text-red-500"}`} />
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col gap-1">
+                <span className={cn(
+                  "text-3xl font-bold tracking-tight transition-all duration-300 md:text-4xl",
+                  totalBalance >= 0 ? "text-emerald-500" : "text-red-500"
+                )}>
+                  {formatCurrency(totalBalance)}
+                </span>
+                <p className="text-xs text-muted-foreground">
+                  {totalBalance > 0
+                    ? "Você tem a receber • Balanço geral de dívidas"
+                    : totalBalance < 0
+                      ? "Você deve no total • Balanço geral de dívidas"
+                      : "Tudo quitado • Balanço zerado"
+                  }
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Pie Chart Card */}
+          <Card className="md:col-span-2 md:row-span-2 flex flex-col overflow-hidden">
+            <CardHeader className="items-center pb-0">
+              <CardTitle className="text-sm font-medium">Gastos por Categoria</CardTitle>
+              <CardDescription>Distribuição dos seus pagamentos</CardDescription>
+            </CardHeader>
+            <CardContent className="flex-1 pb-0">
+              <div className="mx-auto aspect-square max-h-[250px]">
+                <CategoryPieChart data={categoryTotals} />
+              </div>
+            </CardContent>
+            <div className="flex justify-center gap-2 pb-4 text-xs text-muted-foreground">
+              <span>Total visível: {formatCurrency(totalCategoryAmount)}</span>
+            </div>
+          </Card>
+
+          {/* Period Stats: Total Gasto */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Gasto</CardTitle>
+              <TrendingUp className="h-4 w-4 text-primary" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{formatCurrency(periodStats.mySpend)}</div>
+              <p className="text-xs text-muted-foreground">
+                Você pagou no período selecionado
+              </p>
+              <div className="mt-3 h-1 w-full rounded-full bg-border">
+                <div
+                  className="h-full rounded-full bg-primary transition-all duration-500"
+                  style={{ width: `${Math.min((periodStats.mySpend / (periodStats.totalSpend || 1)) * 100, 100)}%` }}
+                />
+              </div>
+              <p className="mt-1 text-[10px] text-muted-foreground text-right">
+                {Math.round((periodStats.mySpend / (periodStats.totalSpend || 1)) * 100)}% do total ({formatCurrency(periodStats.totalSpend)})
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Current Month Stats */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Em {monthLabel}</CardTitle>
+              <Calendar className="h-4 w-4 text-primary" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{formatCurrency(currentMonthStats.mySpend)}</div>
+              <p className="text-xs text-muted-foreground">
+                Seus pagamentos este mês
+              </p>
+              <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                <span>{currentMonthStats.count} lançamentos</span>
+                <span>Total: {formatCurrency(currentMonthStats.totalSpend)}</span>
+              </div>
+            </CardContent>
+          </Card>
         </div>
-        {pendingRequests.length > 0 ? (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {pendingRequests.map(request => (
-              <div
-                key={request.id}
-                className="group relative overflow-hidden rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-500/5 via-black/40 to-black/40 p-5 shadow-lg backdrop-blur-xl transition-all duration-300 hover:border-amber-500/40 hover:shadow-amber-500/5"
-              >
-                <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-                <div className="relative space-y-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-foreground truncate">{request.description}</p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        Solicitado por{" "}
-                        <span className={cn(
-                          "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
-                          getUserColorClasses((request.participants ?? [])[0] ?? "")
-                        )}>
-                          {(request.participants ?? [])[0] ?? "—"}
-                        </span>
-                      </p>
+
+        {/* ── Charts & Main Visuals ── */}
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-3">
+            <BalanceChart series={chartSeries} currentUser={currentUser} />
+          </div>
+        </div>
+
+        {/* ── Solicitações de Dinheiro (Collapsible/Conditional) ── */}
+        <section className="space-y-4">
+          {pendingRequests.length > 0 ? (
+            <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6 backdrop-blur-sm">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <HandCoins className="h-5 w-5 text-amber-400 animate-pulse" />
+                  <h3 className="text-lg font-semibold text-amber-400">Solicitações Pendentes</h3>
+                  <span className="ml-2 inline-flex items-center rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-medium text-amber-500 ring-1 ring-inset ring-amber-500/20">
+                    {pendingRequests.length}
+                  </span>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleOpenRequestDialog}
+                  className="text-amber-500 hover:text-amber-400 hover:bg-amber-500/10"
+                >
+                  Nova solicitação
+                  <ArrowUpRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {pendingRequests.map(request => (
+                  <div
+                    key={request.id}
+                    className="group relative overflow-hidden rounded-xl border border-amber-500/20 bg-black/40 p-4 shadow-sm transition-all hover:border-amber-500/40 hover:shadow-md"
+                  >
+                    <div className="flex justify-between items-start gap-2">
+                      <div className="space-y-1">
+                        <p className="font-medium text-foreground truncate">{request.description}</p>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span>De: {getUserColorClasses((request.participants ?? [])[0]).split(' ').slice(0, 1) ? (request.participants ?? [])[0] : 'Desconhecido'}</span>
+                          <span>•</span>
+                          <span>{format(parseISO(request.date), "dd/MM")}</span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-amber-400">{formatCurrency(request.amount ?? 0)}</p>
+                      </div>
                     </div>
-                    <p className="text-lg font-bold text-amber-400 whitespace-nowrap">
-                      {request.amount !== null ? formatCurrency(request.amount) : "—"}
-                    </p>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs text-muted-foreground">
-                      {format(parseISO(request.date), "dd/MM/yyyy")}
-                    </p>
+
                     <Button
                       type="button"
                       size="sm"
                       onClick={() => handleMarkAsPaid(request.id)}
                       disabled={markingPaidId === request.id}
-                      className="h-8 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 px-4 text-xs font-semibold text-white shadow-sm transition-all hover:from-green-500 hover:to-emerald-500 hover:shadow-green-500/20"
+                      className="mt-3 w-full h-8 bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 border border-amber-500/20"
                     >
-                      {markingPaidId === request.id ? (
-                        <>
-                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                          Processando...
-                        </>
-                      ) : (
-                        <>
-                          <Check className="mr-1.5 h-3.5 w-3.5" />
-                          Marcar como Pago
-                        </>
-                      )}
+                      {markingPaidId === request.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Marcar como Pago"}
                     </Button>
                   </div>
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
-        ) : (
-          <div className="rounded-2xl border border-dashed border-amber-500/20 bg-black/20 p-6 text-center backdrop-blur-sm">
-            <p className="text-sm text-muted-foreground">Nenhuma solicitação pendente no momento.</p>
-          </div>
-        )}
-      </section>
-
-      <section className="grid gap-4 md:grid-cols-3">
-        <Card className="md:col-span-2">
-          <CardHeader className="space-y-1">
-            <CardTitle>Saldo Total</CardTitle>
-            <p className="text-sm text-muted-foreground">Balanço geral de dívidas</p>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <p className={cn("text-3xl font-semibold", totalBalance >= 0 ? "text-green-600" : "text-destructive")}>
-              {formatCurrency(totalBalance)}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              {totalBalance > 0 ? "Você tem a receber" : totalBalance < 0 ? "Você deve no total" : "Tudo quitado"}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="md:row-span-2 flex flex-col">
-          <CardHeader className="space-y-1">
-            <CardTitle>Total por categoria</CardTitle>
-            <p className="text-sm text-muted-foreground">Inclui lançamentos sem categoria</p>
-          </CardHeader>
-          <CardContent className="flex-1 p-6 pt-0 flex items-center justify-center">
-            <CategoryPieChart data={categoryTotals} />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="space-y-1">
-            <CardTitle>Total gasto</CardTitle>
-            <p className="text-sm text-muted-foreground">Gastos no período visível</p>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">Você pagou</p>
-              <p className="text-2xl font-semibold">{formatCurrency(periodStats.mySpend)}</p>
             </div>
-            <div className="pt-2 border-t border-border/50">
-              <p className="text-xs font-medium text-muted-foreground">Total das transações</p>
-              <p className="text-lg text-muted-foreground">{formatCurrency(periodStats.totalSpend)}</p>
+          ) : (
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={handleOpenRequestDialog}
+                className="text-muted-foreground hover:text-amber-400 transition-colors"
+              >
+                <HandCoins className="mr-2 h-4 w-4" />
+                Solicitar Dinheiro
+              </Button>
             </div>
-          </CardContent>
-        </Card>
+          )}
+        </section>
+      </div>
 
-        <Card>
-          <CardHeader className="space-y-1">
-            <CardTitle>{`Em ${monthLabel}`}</CardTitle>
-            <p className="text-sm text-muted-foreground">Visão geral do mês atual</p>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">Você pagou</p>
-              <p className="text-2xl font-semibold">{formatCurrency(currentMonthStats.mySpend)}</p>
-            </div>
-            <div className="pt-2 border-t border-border/50">
-              <div className="flex justify-between items-baseline">
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground">Total das transações</p>
-                  <p className="text-lg text-muted-foreground">{formatCurrency(currentMonthStats.totalSpend)}</p>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {currentMonthStats.count === 1
-                    ? "1 lança."
-                    : `${currentMonthStats.count} lança.`}
+      {requestDialogOpen && (
+        <div className="fixed inset-0 z-50">
+          <div
+            className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+            onClick={handleCloseRequestDialog}
+            aria-hidden="true"
+          />
+          <div className="relative flex h-full items-center justify-center p-4" onKeyDown={handleRequestDialogKeyDown}>
+            <div
+              className="w-full max-w-xl rounded-lg border border-border bg-card p-6 shadow-lg outline-none"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="request-dialog-title"
+              aria-describedby="request-dialog-description"
+            >
+              <div className="flex items-center justify-between">
+                <p id="request-dialog-title" className="text-lg font-semibold flex items-center gap-2">
+                  <HandCoins className="h-5 w-5 text-amber-500" />
+                  Solicitar Dinheiro
                 </p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleCloseRequestDialog}
+                  disabled={requestPending}
+                  aria-label="Fechar solicitação de dinheiro"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
               </div>
+              <p id="request-dialog-description" className="mt-2 text-sm text-muted-foreground">
+                Envie uma notificação para os outros membros solicitando um pagamento.
+              </p>
+              <form onSubmit={handleSubmitRequest} className="mt-6 space-y-4" noValidate>
+                <div className="space-y-2">
+                  <Label htmlFor="request-description">Descrição da Solicitação</Label>
+                  <Input
+                    ref={requestFirstFieldRef}
+                    id="request-description"
+                    name="description"
+                    autoComplete="off"
+                    value={requestForm.description}
+                    onChange={(e) => setRequestForm(prev => ({ ...prev, description: e.target.value }))}
+                    placeholder="Ex: Conta de luz, Almoço..."
+                    required
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="request-amount">Valor total</Label>
+                    <Input
+                      id="request-amount"
+                      name="amount"
+                      autoComplete="off"
+                      inputMode="decimal"
+                      placeholder="0,00"
+                      value={requestForm.amount}
+                      onChange={(e) => setRequestForm(prev => ({ ...prev, amount: e.target.value }))}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="request-date">Data</Label>
+                    <Input
+                      id="request-date"
+                      type="date"
+                      name="date"
+                      value={requestForm.date}
+                      onChange={(e) => setRequestForm(prev => ({ ...prev, date: e.target.value }))}
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="request-pix">Chave PIX (Opcional)</Label>
+                  <Input
+                    id="request-pix"
+                    name="pix"
+                    autoComplete="off"
+                    placeholder="Celular, CPF, Email ou Aleatória..."
+                    value={requestForm.pix}
+                    onChange={(e) => setRequestForm(prev => ({ ...prev, pix: e.target.value }))}
+                  />
+                </div>
+                <div className="flex justify-end pt-2">
+                  <Button type="submit" disabled={requestPending || !isRequestFormValid} className="bg-amber-500 hover:bg-amber-600 text-black border-amber-500/50" aria-busy={requestPending}>
+                    {requestPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                        Enviando...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="mr-2 h-4 w-4" aria-hidden="true" />
+                        Enviar Solicitação
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </form>
+              {error && (
+                <p className="mt-4 text-sm text-destructive" role="alert">
+                  {error}
+                </p>
+              )}
             </div>
-          </CardContent>
-        </Card>
-      </section>
-
-      <section>
-        <BalanceChart series={chartSeries} currentUser={currentUser} />
-      </section>
+          </div>
+        </div>
+      )}
 
       {createDialogOpen && (
         <div className="fixed inset-0 z-50">
@@ -1732,138 +1882,117 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
         )
       }
 
-      <section className="space-y-4">
-        <div className="rounded-2xl border border-border bg-black/40 p-6 shadow-sm backdrop-blur-xl">
+      <section className="space-y-6">
+        <div className="rounded-3xl border border-border/50 bg-black/20 p-6 backdrop-blur-xl">
           <div className="flex flex-col gap-6">
-            <div className="flex w-full flex-col gap-2">
-              <Label htmlFor="search" className="text-sm font-semibold">
-                Buscar
-              </Label>
-              <div className="relative">
-                <span className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-muted-foreground">
-                  <Search className="h-4 w-4" aria-hidden="true" />
+            {/* Search Bar Row */}
+            <div className="relative">
+              <Label htmlFor="search" className="sr-only">Buscar</Label>
+              <div className="relative group">
+                <span className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-muted-foreground transition-colors group-focus-within:text-primary">
+                  <Search className="h-5 w-5" />
                 </span>
                 <Input
                   ref={searchInputRef}
                   id="search"
                   type="search"
-                  placeholder="Descrição, categoria ou quem pagou"
+                  placeholder="Buscar por descrição, categoria ou quem pagou..."
                   autoComplete="off"
                   value={search}
                   onChange={event => setSearch(event.target.value)}
                   className={cn(
-                    "h-11 w-full rounded-xl border border-border bg-black/20 pl-11 text-sm transition-all backdrop-blur-sm",
-                    search.trim() && "border-primary/60 bg-primary/5 text-foreground shadow-sm"
+                    "h-12 w-full rounded-2xl border-border/50 bg-black/40 pl-12 text-base shadow-sm transition-all focus:border-primary/50 focus:bg-black/60 focus:ring-4 focus:ring-primary/10",
+                    search.trim() && "border-primary/50 bg-primary/5"
                   )}
-                  aria-controls="transactions-table"
                 />
               </div>
             </div>
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor="startDate" className="text-sm font-semibold">
-                    Data inicial
+
+            {/* Filters & Actions Row */}
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="w-full sm:w-auto">
+                  <Label htmlFor="startDate" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Período
                   </Label>
-                  <Input
-                    id="startDate"
-                    type="date"
-                    value={startDate}
-                    onChange={event => setStartDate(event.target.value)}
-                    className={cn(
-                      "h-11 rounded-xl border border-border bg-black/20 text-sm transition-all focus-visible:ring-0 backdrop-blur-sm sm:w-44",
-                      startDate && "border-primary/60 bg-primary/5 text-foreground shadow-sm"
-                    )}
-                  />
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1 sm:w-40">
+                      <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                      <Input
+                        id="startDate"
+                        type="date"
+                        value={startDate}
+                        onChange={event => setStartDate(event.target.value)}
+                        className="h-10 rounded-xl border-border/50 bg-black/40 pl-9 text-sm focus:bg-black/60"
+                      />
+                    </div>
+                    <span className="text-muted-foreground/50">→</span>
+                    <div className="relative flex-1 sm:w-40">
+                      <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                      <Input
+                        id="endDate"
+                        type="date"
+                        value={endDate}
+                        onChange={event => setEndDate(event.target.value)}
+                        className="h-10 rounded-xl border-border/50 bg-black/40 pl-9 text-sm focus:bg-black/60"
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center justify-center pb-2 sm:px-2">
-                  <span className="text-xs font-medium text-muted-foreground">até</span>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor="endDate" className="text-sm font-semibold">
-                    Data final
-                  </Label>
-                  <Input
-                    id="endDate"
-                    type="date"
-                    value={endDate}
-                    onChange={event => setEndDate(event.target.value)}
-                    className={cn(
-                      "h-11 rounded-xl border border-border bg-black/20 text-sm transition-all focus-visible:ring-0 backdrop-blur-sm sm:w-44",
-                      endDate && "border-primary/60 bg-primary/5 text-foreground shadow-sm"
-                    )}
-                  />
-                </div>
-              </div>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+
                 <Button
                   type="button"
                   variant="ghost"
                   onClick={handleResetFilters}
                   disabled={!hasActiveFilters}
                   className={cn(
-                    "h-11 rounded-xl border px-5 text-sm font-semibold transition-all",
+                    "h-10 px-4 rounded-xl transition-all",
                     hasActiveFilters
-                      ? "border-primary/60 bg-primary/10 text-primary hover:bg-primary/20"
-                      : "border-dashed border-border text-muted-foreground"
+                      ? "bg-primary/10 text-primary hover:bg-primary/20"
+                      : "text-muted-foreground hover:bg-white/5"
                   )}
                 >
-                  <FilterX className="mr-2 h-4 w-4" aria-hidden="true" />
-                  Limpar filtros
+                  <FilterX className="mr-2 h-4 w-4" />
+                  Limpar
                 </Button>
+              </div>
+
+              <div className="flex items-center gap-3">
                 <div className="relative">
                   <Button
                     ref={createButtonRef}
-                    type="button"
                     onClick={() => setAddMenuOpen(!addMenuOpen)}
-                    aria-haspopup="menu"
-                    aria-expanded={addMenuOpen}
-                    className="h-11 rounded-xl"
+                    className="h-10 rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all hover:scale-105 active:scale-95"
                   >
                     <Plus className="mr-2 h-4 w-4" />
-                    Adicionar transação
-                    <ChevronDown className="ml-2 h-4 w-4" />
+                    Nova Transação
+                    <ChevronDown className="ml-2 h-4 w-4 opacity-70" />
                   </Button>
+
                   {addMenuOpen && (
                     <>
-                      <div
-                        className="fixed inset-0 z-10"
-                        onClick={() => setAddMenuOpen(false)}
-                        aria-hidden="true"
-                      />
-                      <div className="absolute right-0 top-full z-20 mt-2 w-56 rounded-lg border border-border bg-black/80 shadow-lg backdrop-blur-xl">
+                      <div className="fixed inset-0 z-10" onClick={() => setAddMenuOpen(false)} />
+                      <div className="absolute right-0 top-full z-20 mt-2 w-56 overflow-hidden rounded-2xl border border-border/50 bg-black/90 p-1 shadow-xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-200">
                         <button
-                          type="button"
-                          onClick={() => {
-                            setAddMenuOpen(false)
-                            handleOpenCreateDialog()
-                          }}
-                          className="w-full px-4 py-2.5 text-left text-sm transition-colors hover:bg-accent"
+                          onClick={() => { setAddMenuOpen(false); handleOpenCreateDialog() }}
+                          className="flex w-full items-center rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-white/10"
                         >
-                          <Plus className="mr-2 inline h-4 w-4" />
-                          Adicionar manualmente
+                          <Plus className="mr-3 h-4 w-4 text-primary" />
+                          Manual
                         </button>
                         <button
-                          type="button"
-                          onClick={() => {
-                            setAddMenuOpen(false)
-                            handleOpenUploadDialog()
-                          }}
-                          className="w-full px-4 py-2.5 text-left text-sm transition-colors hover:bg-accent"
+                          onClick={() => { setAddMenuOpen(false); handleOpenUploadDialog() }}
+                          className="flex w-full items-center rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-white/10"
                         >
-                          <Upload className="mr-2 inline h-4 w-4" />
-                          Adicionar por imagem
+                          <Upload className="mr-3 h-4 w-4 text-blue-400" />
+                          Por Imagem via IA
                         </button>
-                        <div className="mx-2 my-1 border-t border-border/50" />
+                        <div className="my-1 border-t border-white/10" />
                         <button
-                          type="button"
-                          onClick={() => {
-                            setAddMenuOpen(false)
-                            handleOpenRequestDialog()
-                          }}
-                          className="w-full px-4 py-2.5 text-left text-sm font-medium text-amber-400 transition-colors hover:bg-amber-500/10"
+                          onClick={() => { setAddMenuOpen(false); handleOpenRequestDialog() }}
+                          className="flex w-full items-center rounded-xl px-4 py-3 text-sm font-medium text-amber-500 transition-colors hover:bg-amber-500/10"
                         >
-                          <HandCoins className="mr-2 inline h-4 w-4" />
+                          <HandCoins className="mr-3 h-4 w-4" />
                           Solicitar Dinheiro
                         </button>
                       </div>
@@ -1875,499 +2004,279 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p id={tableSummaryId} className="text-sm text-muted-foreground" aria-live="polite">
+        {/* Table Summary & Bulk Actions */}
+        <div className="flex min-h-[40px] flex-wrap items-center justify-between gap-4 px-2">
+          <div className="text-sm text-muted-foreground/80">
             {resultsSummary}
-          </p>
+          </div>
+
           {selectionSummary && (
-            <div className="flex items-center gap-3">
-              <p className="text-sm font-medium text-foreground" role="status" aria-live="polite">
+            <div className="flex items-center gap-3 animate-in fade-in slide-in-from-right-4 duration-300">
+              <span className="text-sm font-medium px-3 py-1 bg-primary/10 text-primary rounded-full">
                 {selectionSummary}
-              </p>
-              <div className="flex items-center gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={() => setBulkQuickEditOpen(true)} disabled={selectedRows.length === 0}>
-                  <Pencil className="mr-2 h-3 w-3" />
-                  Editar
+              </span>
+              <div className="flex items-center gap-1 bg-black/40 rounded-lg p-1 border border-border/50">
+                <Button variant="ghost" size="sm" onClick={() => setBulkQuickEditOpen(true)} className="h-8 w-8 p-0 rounded-md hover:bg-white/10">
+                  <Pencil className="h-4 w-4" />
                 </Button>
-                <Button type="button" variant="outline" size="sm" onClick={() => setBulkAdvancedEditOpen(true)} disabled={selectedRows.length === 0}>
-                  <Pencil className="mr-2 h-3 w-3" />
-                  Edição avançada…
+                <Button variant="ghost" size="sm" onClick={() => setBulkDeleteOpen(true)} className="h-8 w-8 p-0 rounded-md hover:bg-destructive/20 hover:text-destructive">
+                  <Trash2 className="h-4 w-4" />
                 </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setBulkDeleteOpen(true)}
-                  disabled={selectedRows.length === 0}
-                >
-                  <Trash2 className="mr-2 h-3 w-3" />
-                  Excluir
-                </Button>
-                <Button type="button" variant="ghost" size="sm" onClick={handleClearSelection}>
-                  <X className="mr-2 h-3 w-3" />
-                  Limpar seleção
+                <div className="w-px h-4 bg-white/10 mx-1" />
+                <Button variant="ghost" size="sm" onClick={handleClearSelection} className="h-8 px-2 text-xs rounded-md hover:bg-white/10">
+                  Cancelar
                 </Button>
               </div>
             </div>
           )}
         </div>
 
-        <div className="overflow-x-auto rounded-2xl border border-border bg-black/40 backdrop-blur-xl">
-          <table
-            id="transactions-table"
-            className="min-w-full divide-y divide-border text-foreground"
-            aria-describedby={tableSummaryId}
-          >
-            <caption id={tableCaptionId} className="px-4 py-2 text-left text-sm text-muted-foreground">
-              Tabela de transações compartilhadas
-            </caption>
-            <thead className="bg-muted/50">
-              <tr>
-                <th
-                  scope="col"
-                  className="w-12 px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-                >
-                  <input
-                    ref={selectAllRef}
-                    type="checkbox"
-                    checked={sortedTransactions.length > 0 && selectedRows.length === sortedTransactions.length}
-                    onChange={handleToggleAll}
-                    className="h-4 w-4 cursor-pointer rounded border border-input bg-background accent-primary"
-                    aria-label="Selecionar todas as transações visíveis"
-                  />
-                </th>
-                {sortableColumns.map(column => {
-                  const isActive = sortField === column.key
-                  const alignmentClasses =
-                    column.align === "right"
-                      ? "justify-end text-right"
-                      : "justify-start text-left"
-                  return (
-                    <th
-                      key={column.key}
-                      className={cn(
-                        "px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground",
-                        column.align === "right" ? "text-right" : "text-left"
-                      )}
-                      scope="col"
-                      aria-sort={getSortState(column.key)}
-                    >
+        {/* Transactions Table */}
+        <div className="overflow-hidden rounded-3xl border border-border/50 bg-black/30 backdrop-blur-xl shadow-2xl">
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-white/5 border-b border-white/5">
+                <tr>
+                  <th className="w-12 px-6 py-4">
+                    <input
+                      type="checkbox"
+                      checked={sortedTransactions.length > 0 && selectedRows.length === sortedTransactions.length}
+                      onChange={handleToggleAll}
+                      className="h-4 w-4 rounded border-white/20 bg-black/40 checked:bg-primary checked:border-primary transition-all"
+                    />
+                  </th>
+                  {sortableColumns.map(col => (
+                    <th key={col.key} className={cn("px-6 py-4 font-semibold text-muted-foreground uppercase tracking-wider text-xs", col.key === "amount" && "text-right")}>
                       <button
-                        type="button"
-                        onClick={() => handleSortToggle(column.key)}
-                        className={cn(
-                          "flex w-full items-center gap-1 text-muted-foreground transition-colors hover:text-foreground",
-                          alignmentClasses,
-                          isActive && "text-foreground"
-                        )}
+                        onClick={() => handleSortToggle(col.key)}
+                        className="flex items-center gap-2 hover:text-foreground transition-colors group"
                       >
-                        <span className={column.labelClassName}>{column.label}</span>
-                        {isActive ? renderSortIcon(column.key) : <ChevronsUpDown className="h-3.5 w-3.5" aria-hidden="true" />}
+                        {col.label}
+                        <div className={cn("transition-opacity", sortField === col.key ? "opacity-100 text-primary" : "opacity-0 group-hover:opacity-50")}>
+                          {sortField === col.key && (sortDirection === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
+                          {sortField !== col.key && <ChevronsUpDown className="h-3 w-3" />}
+                        </div>
                       </button>
                     </th>
-                  )
-                })}
-                <th
-                  scope="col"
-                  className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-                >
-                  Ações
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border bg-card">
-              {loading ? (
-                <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">
-                    Carregando transações...
-                  </td>
+                  ))}
+                  <th className="px-6 py-4 text-right font-semibold text-muted-foreground uppercase tracking-wider text-xs">Ações</th>
                 </tr>
-              ) : sortedTransactions.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">
-                    Nenhuma transação encontrada
-                  </td>
-                </tr>
-              ) : (
-                paginatedTransactions.map(transaction => {
-                  const isEditing = editRowId === transaction.id
-                  return (
-                    <tr
-                      key={transaction.id}
-                      className={cn(
-                        "transition-all duration-200",
-                        isEditing
-                          ? "bg-primary/5 ring-1 ring-inset ring-primary/20"
-                          : "hover:bg-muted/50",
-                        selectedRows.includes(transaction.id) && !isEditing ? "bg-muted/70" : ""
-                      )}
-                      aria-selected={selectedRows.includes(transaction.id)}
-                    >
-                      <td className="px-4 py-2 align-middle whitespace-nowrap">
-                        <div className="flex items-center">
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {loading ? (
+                  <tr>
+                    <td colSpan={8} className="px-6 py-12 text-center text-muted-foreground">
+                      <Loader2 className="mx-auto h-8 w-8 animate-spin opacity-50 mb-2" />
+                      Carregando transações...
+                    </td>
+                  </tr>
+                ) : sortedTransactions.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-6 py-12 text-center text-muted-foreground">
+                      Nenhuma transação encontrada para os filtros aplicados.
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedTransactions.map((transaction, idx) => {
+                    const isEditing = editRowId === transaction.id
+                    const isSelected = selectedRows.includes(transaction.id)
+
+                    return (
+                      <tr
+                        key={transaction.id}
+                        className={cn(
+                          "group transition-colors duration-200",
+                          isEditing ? "bg-primary/5" : "hover:bg-white/5",
+                          isSelected && !isEditing && "bg-primary/5",
+                          idx % 2 === 0 && !isEditing && !isSelected && "bg-white/[0.02]"
+                        )}
+                      >
+                        <td className="px-6 py-4">
                           <input
                             type="checkbox"
-                            checked={selectedRows.includes(transaction.id)}
+                            checked={isSelected}
                             onChange={() => handleToggleRow(transaction.id)}
-                            className="h-4 w-4 cursor-pointer rounded border border-input bg-background accent-primary"
-                            aria-label={`Selecionar ${transaction.description}`}
+                            className="h-4 w-4 rounded border-white/20 bg-black/40 checked:bg-primary checked:border-primary transition-all cursor-pointer opacity-50 group-hover:opacity-100"
                           />
-                        </div>
-                      </td>
-                      <td className="px-4 py-2 align-middle">
-                        <div className="flex items-center">
+                        </td>
+
+                        {/* Description */}
+                        <td className="px-6 py-4 max-w-[300px]">
                           {isEditing ? (
                             <Input
                               name="description"
                               value={editForm.description}
                               onChange={handleEditInputChange}
-                              required
-                              className="h-9 rounded-lg border-border/50 bg-background/80 backdrop-blur-sm focus:border-primary/50 focus:bg-background"
+                              className="h-8 text-sm"
+                              autoFocus
                             />
                           ) : (
-                            <span className="text-sm font-semibold text-foreground">{transaction.description}</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-2 align-middle text-sm text-muted-foreground">
-                        <div className="flex items-center">
-                          {isEditing ? (
-                            <div className="w-full min-w-[140px]">
-                              <CategorySelector
-                                value={editForm.category}
-                                onChange={(value) => setEditForm(prev => ({ ...prev, category: value }))}
-                              />
+                            <div className="truncate font-medium text-foreground/90">
+                              {transaction.description}
                             </div>
-                          ) : (
-                            normalizeText(transaction.category) || "—"
                           )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-2 align-middle text-sm text-muted-foreground">
-                        <div className="flex items-center">
+                        </td>
+
+                        {/* Category */}
+                        <td className="px-6 py-4">
+                          {isEditing ? (
+                            <CategorySelector
+                              value={editForm.category}
+                              onChange={(val) => setEditForm(prev => ({ ...prev, category: val }))}
+                            />
+                          ) : (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-white/5 text-muted-foreground border border-white/5">
+                              {normalizeText(transaction.category) || "Sem categoria"}
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Date */}
+                        <td className="px-6 py-4 text-muted-foreground tabular-nums">
                           {isEditing ? (
                             <Input
-                              name="date"
                               type="date"
+                              name="date"
                               value={editForm.date}
                               onChange={handleEditInputChange}
-                              required
-                              className="h-9 rounded-lg border-border/50 bg-background/80 backdrop-blur-sm focus:border-primary/50 focus:bg-background"
+                              className="h-8 text-sm w-36"
                             />
                           ) : (
                             format(parseISO(transaction.date), "dd/MM/yyyy")
                           )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-2 align-middle">
-                        <div className="flex items-center">
+                        </td>
+
+                        {/* Paid By */}
+                        <td className="px-6 py-4">
                           {isEditing ? (
-                            <div className="min-w-[130px]">
-                              <PayerSelector
-                                value={editForm.paid_by}
-                                onChange={(value) => setEditForm(prev => ({ ...prev, paid_by: value }))}
-                                currentUser={currentUser}
-                              />
-                            </div>
+                            <PayerSelector
+                              value={editForm.paid_by}
+                              onChange={val => setEditForm(prev => ({ ...prev, paid_by: val }))}
+                              currentUser={currentUser}
+                            />
                           ) : (
-                            <span className={cn(
-                              "inline-flex items-center rounded-full border px-3 py-0.5 text-xs font-medium",
-                              getUserColorClasses(transaction.paid_by)
-                            )}>
+                            <span className={cn("inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset", getUserColorClasses(transaction.paid_by))}>
                               {transaction.paid_by}
                             </span>
                           )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-2 text-right align-middle text-sm text-muted-foreground whitespace-nowrap">
-                        <div className="flex justify-end">
+                        </td>
+
+                        {/* Amount */}
+                        <td className="px-6 py-4 text-right font-medium tabular-nums">
                           {isEditing ? (
                             <Input
                               name="amount"
                               value={editForm.amount}
                               onChange={handleEditInputChange}
-                              inputMode="decimal"
-                              placeholder="0,00"
-                              className="h-9 w-28 rounded-lg border-border/50 bg-background/80 text-right backdrop-blur-sm focus:border-primary/50 focus:bg-background"
+                              className="h-8 text-right w-24 ml-auto"
                             />
                           ) : (
-                            transaction.amount !== null ? formatCurrency(transaction.amount) : "—"
+                            <span className={(transaction.amount || 0) > 1000 ? "text-foreground" : "text-muted-foreground"}>
+                              {formatCurrency(transaction.amount || 0)}
+                            </span>
                           )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-2 text-right align-middle text-sm text-muted-foreground">
-                        <div className="flex justify-end gap-1.5 flex-wrap">
-                          {isEditing ? (
-                            <div className="flex flex-wrap gap-2 justify-end">
-                              {PARTICIPANTS.map(p => {
-                                const isSelected = editForm.participants.includes(p)
-                                return (
-                                  <label
-                                    key={p}
-                                    className={cn(
-                                      "flex items-center gap-1.5 cursor-pointer rounded-full px-2.5 py-1 text-xs font-medium transition-all duration-200 border",
-                                      isSelected
-                                        ? getUserColorClasses(p)
-                                        : "bg-muted/30 text-muted-foreground border-border/50 hover:bg-muted/50"
-                                    )}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={isSelected}
-                                      onChange={(e) => {
-                                        const checked = e.target.checked
-                                        setEditForm(prev => {
-                                          const current = prev.participants
-                                          if (checked) return { ...prev, participants: [...current, p] }
-                                          return { ...prev, participants: current.filter(x => x !== p) }
-                                        })
+                        </td>
+
+                        {/* Participants */}
+                        <td className="px-6 py-4">
+                          <div className="flex -space-x-1 overflow-hidden py-1">
+                            {isEditing ? (
+                              <div className="flex gap-2">
+                                {PARTICIPANTS.map(p => (
+                                  <label key={p} className={cn("cursor-pointer px-2 py-1 rounded text-xs border", editForm.participants.includes(p) ? getUserColorClasses(p) : "border-border text-muted-foreground")}>
+                                    <input type="checkbox" className="sr-only" checked={editForm.participants.includes(p)}
+                                      onChange={e => {
+                                        const checked = e.target.checked;
+                                        setEditForm(prev => ({
+                                          ...prev,
+                                          participants: checked ? [...prev.participants, p] : prev.participants.filter(x => x !== p)
+                                        }))
                                       }}
-                                      className="sr-only"
                                     />
-                                    {p}
+                                    {p.charAt(0)}
                                   </label>
-                                )
-                              })}
-                            </div>
-                          ) : (
-                            (transaction.participants ?? []).map(p => (
-                              <span
-                                key={p}
-                                className={cn(
-                                  "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium",
-                                  getUserColorClasses(p)
-                                )}
-                              >
-                                {p}
-                              </span>
-                            ))
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-2 text-right align-middle">
-                        <div className="flex justify-end items-center gap-1.5">
-                          {isEditing ? (
-                            <>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                onClick={handleCancelEdit}
-                                disabled={editPending}
-                                aria-label="Cancelar edição"
-                                className="h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                type="button"
-                                size="icon"
-                                onClick={() => handleSaveEdit(transaction.id)}
-                                disabled={editPending}
-                                aria-label="Salvar edição"
-                                className="h-8 w-8 rounded-lg bg-green-600 hover:bg-green-500 text-white shadow-sm"
-                              >
-                                {editPending ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
+                                ))}
+                              </div>
+                            ) : (
+                              transaction.participants?.map(p => (
+                                <div key={p} className={cn("inline-flex h-6 w-6 items-center justify-center rounded-full ring-2 ring-background text-[10px] font-bold", getUserColorClasses(p).replace('bg-', 'bg-opacity-100 bg-'))}>
+                                  {p.charAt(0)}
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Actions */}
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex justify-end gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                            {isEditing ? (
+                              <>
+                                <Button size="icon" variant="ghost" className="h-8 w-8 text-green-500 hover:text-green-400 hover:bg-green-500/10" onClick={() => handleSaveEdit(transaction.id)}>
                                   <Check className="h-4 w-4" />
+                                </Button>
+                                <Button size="icon" variant="ghost" className="h-8 w-8 text-red-500 hover:text-red-400 hover:bg-red-500/10" onClick={handleCancelEdit}>
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </>
+                            ) : (
+                              <>
+                                {(currentUser === "Antônio" || transaction.paid_by === currentUser) && (
+                                  <>
+                                    <Button size="icon" variant="ghost" className="h-8 w-8 hover:bg-white/10" onClick={() => handleEdit(transaction)}>
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Button size="icon" variant="ghost" className="h-8 w-8 hover:bg-red-500/10 hover:text-red-400" onClick={() => handleDelete(transaction.id)}>
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </>
                                 )}
-                              </Button>
-                            </>
-                          ) : (
-                            <>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleEdit(transaction)}
-                                aria-label="Editar transação"
-                                className={cn(
-                                  "h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted",
-                                  !(currentUser === "Antônio" || transaction.paid_by === currentUser) && "hidden"
-                                )}
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleDelete(transaction.id)}
-                                disabled={deletePendingId === transaction.id}
-                                aria-label="Excluir transação"
-                                className={cn(
-                                  "h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10",
-                                  !(currentUser === "Antônio" || transaction.paid_by === currentUser) && "hidden"
-                                )}
-                              >
-                                {deletePendingId === transaction.id ? (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                ) : (
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                )}
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between border-t border-white/5 bg-black/20 px-6 py-4">
+              <div className="text-xs text-muted-foreground">
+                Mostrando {(currentPage - 1) * ITEMS_PER_PAGE + 1} a {Math.min(currentPage * ITEMS_PER_PAGE, sortedTransactions.length)} de {sortedTransactions.length}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="h-8 w-8 p-0 rounded-full"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="text-sm font-medium min-w-[3rem] text-center">
+                  {currentPage} / {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="h-8 w-8 p-0 rounded-full"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
-      {/* ── Money Request Dialog ── */}
-      {requestDialogOpen && (
-        <div className="fixed inset-0 z-50">
-          <div
-            className="absolute inset-0 bg-background/80 backdrop-blur-sm"
-            onClick={handleCloseRequestDialog}
-            aria-hidden="true"
-          />
-          <div className="relative flex h-full items-center justify-center p-4" onKeyDown={handleRequestDialogKeyDown}>
-            <div
-              className="w-full max-w-lg rounded-2xl border border-amber-500/20 bg-card p-6 shadow-2xl outline-none"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="request-dialog-title"
-              aria-describedby="request-dialog-description"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/10">
-                    <HandCoins className="h-5 w-5 text-amber-400" />
-                  </div>
-                  <p id="request-dialog-title" className="text-lg font-semibold text-foreground">
-                    Solicitar Dinheiro
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleCloseRequestDialog}
-                  disabled={requestPending}
-                  aria-label="Fechar formulário de solicitação"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-              <p id="request-dialog-description" className="mt-2 text-sm text-muted-foreground">
-                Crie uma solicitação de dinheiro. Qualquer pessoa poderá marcar como pago.
-              </p>
-              <form onSubmit={handleSubmitRequest} className="mt-6 space-y-4" noValidate>
-                <div className="space-y-2">
-                  <Label htmlFor="request-description">Descrição</Label>
-                  <Input
-                    ref={requestFirstFieldRef}
-                    id="request-description"
-                    autoComplete="off"
-                    placeholder="Ex: Aluguel, Conta de luz..."
-                    value={requestForm.description}
-                    onChange={e => setRequestForm(prev => ({ ...prev, description: e.target.value }))}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="request-pix">Chave PIX</Label>
-                  <Input
-                    id="request-pix"
-                    placeholder="CPF, Email, Telefone..."
-                    autoComplete="off"
-                    value={requestForm.pix}
-                    onChange={e => setRequestForm(prev => ({ ...prev, pix: e.target.value }))}
-                  />
-                </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="request-amount">Valor</Label>
-                    <Input
-                      id="request-amount"
-                      autoComplete="off"
-                      inputMode="decimal"
-                      placeholder="0,00"
-                      value={requestForm.amount}
-                      onChange={e => setRequestForm(prev => ({ ...prev, amount: e.target.value }))}
-                      aria-invalid={requestForm.amount.trim().length > 0 && requestAmountValue === null}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="request-date">Data</Label>
-                    <Input
-                      id="request-date"
-                      type="date"
-                      value={requestForm.date}
-                      onChange={e => setRequestForm(prev => ({ ...prev, date: e.target.value }))}
-                      required
-                    />
-                  </div>
-                </div>
-                <div className="rounded-xl border border-border/50 bg-muted/20 p-3">
-                  <p className="text-xs text-muted-foreground">
-                    <span className="font-medium text-foreground">Solicitante:</span> {currentUser}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    A solicitação ficará visível para todos. Quem marcar como pago será registrado automaticamente.
-                  </p>
-                </div>
-                <div className="flex justify-end">
-                  <Button
-                    type="submit"
-                    disabled={requestPending || !isRequestFormValid}
-                    aria-busy={requestPending}
-                    className="rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 px-6 font-semibold text-white shadow-sm transition-all hover:from-amber-500 hover:to-amber-400 hover:shadow-amber-500/20"
-                  >
-                    {requestPending ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-                        Enviando...
-                      </>
-                    ) : (
-                      <>
-                        <HandCoins className="mr-2 h-4 w-4" aria-hidden="true" />
-                        Solicitar
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </form>
-              {error && (
-                <p className="mt-4 text-sm text-destructive" role="alert">
-                  {error}
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-4 pb-8">
-          <Button
-            variant="outline"
-            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-            disabled={currentPage === 1}
-          >
-            <ChevronLeft className="mr-2 h-4 w-4" />
-            Anterior
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            Página {currentPage} de {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-            disabled={currentPage === totalPages}
-          >
-            Próxima
-            <ChevronRight className="ml-2 h-4 w-4" />
-          </Button>
-        </div>
-      )}
     </div >
   )
 }

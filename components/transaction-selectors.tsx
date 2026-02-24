@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { CustomSelect } from "@/components/ui/custom-select"
-import { getCategories, upsertCategory, getSupabaseClient } from "@/lib/supabase"
+import { getCategories, getSupabaseClient } from "@/lib/supabase"
 import { Loader2 } from "lucide-react"
 
 interface CategorySelectorProps {
@@ -12,48 +12,67 @@ interface CategorySelectorProps {
     className?: string
 }
 
+// Module-level cache for categories
+let cachedCategories: string[] | null = null
+let categoriesFetchPromise: Promise<string[]> | null = null
+
+async function loadCategoriesShared(): Promise<string[]> {
+    if (cachedCategories) return cachedCategories
+    if (categoriesFetchPromise) return categoriesFetchPromise
+
+    categoriesFetchPromise = (async () => {
+        try {
+            const supabase = getSupabaseClient()
+
+            // Fetch defined categories
+            const { data: definedCategories } = await getCategories()
+            const definedNames = definedCategories?.map(c => c.name) || []
+
+            // Fetch used categories from transactions
+            const { data: transactions } = await supabase
+                .from("shared_transactions")
+                .select("category")
+                .not("category", "is", null)
+
+            const usedCategories = transactions
+                ?.map(t => t.category)
+                .filter((c): c is string => !!c) || []
+
+            // Merge and sort
+            cachedCategories = Array.from(new Set([...definedNames, ...usedCategories]))
+                .sort((a, b) => a.localeCompare(b, "pt-BR"))
+
+            return cachedCategories
+        } catch (error) {
+            console.error("Failed to load categories", error)
+            return []
+        } finally {
+            categoriesFetchPromise = null
+        }
+    })()
+
+    return categoriesFetchPromise
+}
+
 export function CategorySelector({ value, onChange, disabled, className }: CategorySelectorProps) {
-    const [categories, setCategories] = useState<string[]>([])
-    const [loading, setLoading] = useState(true)
+    const [categories, setCategories] = useState<string[]>(() => cachedCategories ?? [])
+    const [loading, setLoading] = useState(cachedCategories === null)
 
     useEffect(() => {
-        const loadCategories = async () => {
-            try {
-                const supabase = getSupabaseClient()
-
-                // 1. Ensure required categories exist
-                await Promise.all([
-                    upsertCategory("Outros"),
-                    upsertCategory("Ingressos")
-                ])
-
-                // 2. Fetch defined categories
-                const { data: definedCategories } = await getCategories()
-                const definedNames = definedCategories?.map(c => c.name) || []
-
-                // 3. Fetch used categories from transactions
-                const { data: transactions } = await supabase
-                    .from("shared_transactions")
-                    .select("category")
-                    .not("category", "is", null)
-
-                const usedCategories = transactions
-                    ?.map(t => t.category)
-                    .filter((c): c is string => !!c) || []
-
-                // 4. Merge and sort
-                const allCategories = Array.from(new Set([...definedNames, ...usedCategories]))
-                    .sort((a, b) => a.localeCompare(b, "pt-BR"))
-
-                setCategories(allCategories)
-            } catch (error) {
-                console.error("Failed to load categories", error)
-            } finally {
-                setLoading(false)
-            }
+        if (cachedCategories) {
+            setCategories(cachedCategories)
+            setLoading(false)
+            return
         }
 
-        loadCategories()
+        let cancelled = false
+        loadCategoriesShared().then(result => {
+            if (!cancelled) {
+                setCategories(result)
+                setLoading(false)
+            }
+        })
+        return () => { cancelled = true }
     }, [])
 
     if (loading) {

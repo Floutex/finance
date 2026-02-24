@@ -1,12 +1,17 @@
 import { forwardRef, type HTMLAttributes } from "react"
 import { cn } from "./utils"
 
-export const Card = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>((props, ref) => {
-  const { className, ...rest } = props
+export const Card = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement> & { variant?: "default" | "highlight" }>((props, ref) => {
+  const { className, variant = "default", ...rest } = props
   return (
     <div
       ref={ref}
-      className={cn("rounded-lg border border-border bg-black/40 text-card-foreground shadow-sm backdrop-blur-xl", className)}
+      className={cn(
+        "rounded-2xl border bg-card text-card-foreground shadow-sm backdrop-blur-xl transition-all duration-300",
+        variant === "default" && "border-border bg-black/40 hover:border-border/80 hover:bg-black/50 hover:shadow-md",
+        variant === "highlight" && "border-primary/20 bg-gradient-to-br from-primary/5 via-primary/0 to-transparent hover:border-primary/40 hover:from-primary/10 hover:shadow-primary/5",
+        className
+      )}
       {...rest}
     />
   )

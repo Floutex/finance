@@ -6,8 +6,8 @@ type CategoryTotal = {
   total: number
 }
 
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value)
+const pieCurrencyFormatter = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" })
+const formatCurrency = (value: number) => pieCurrencyFormatter.format(value)
 
 const colors = getUserColors()
 

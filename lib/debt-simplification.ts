@@ -11,7 +11,6 @@ export interface Debt {
 }
 
 export function simplifyDebts(transactions: Transaction[]): Debt[] {
-    console.log('🔍 Starting pairwise debt calculation with', transactions.length, 'transactions')
 
     // Step 1: Calculate pairwise debts (who owes whom directly from transactions)
     const pairwiseDebts = new Map<string, Map<string, number>>()
@@ -36,20 +35,12 @@ export function simplifyDebts(transactions: Transaction[]): Debt[] {
             }
         })
 
-        if (idx < 3 || idx >= transactions.length - 3) {
-            console.log(`📝 Transaction ${idx + 1}: ${t.paid_by} paid ${t.amount} for ${t.participants.length} people`)
-        }
     })
 
-    console.log('\n💰 Pairwise debts (before consolidation):')
-    pairwiseDebts.forEach((creditors, debtor) => {
-        creditors.forEach((amount, creditor) => {
-            console.log(`  ${debtor} → ${creditor}: ${amount.toFixed(2)}`)
-        })
-    })
+
 
     // Step 2: Consolidate bidirectional debts (net out A→B and B→A)
-    console.log('\n🔄 Consolidating bidirectional debts...')
+
     const processedPairs = new Set<string>()
 
     pairwiseDebts.forEach((creditorsA, debtorA) => {
@@ -67,7 +58,7 @@ export function simplifyDebts(transactions: Transaction[]): Debt[] {
                 const netDebtor = amountAtoB > debtBtoA ? debtorA : creditorB
                 const netCreditor = amountAtoB > debtBtoA ? creditorB : debtorA
 
-                console.log(`  Consolidating ${debtorA}↔${creditorB}: ${amountAtoB.toFixed(2)} vs ${debtBtoA.toFixed(2)} = ${netDebtor}→${netCreditor}: ${netAmount.toFixed(2)}`)
+
 
                 // Update the debt maps
                 creditorsA.set(creditorB, amountAtoB > debtBtoA ? netAmount : 0)
@@ -90,15 +81,10 @@ export function simplifyDebts(transactions: Transaction[]): Debt[] {
         }
     })
 
-    console.log('\n💚 Net pairwise debts (after consolidation):')
-    pairwiseDebts.forEach((creditors, debtor) => {
-        creditors.forEach((amount, creditor) => {
-            console.log(`  ${debtor} → ${creditor}: ${amount.toFixed(2)}`)
-        })
-    })
+
 
     // Step 3: Detect and simplify chains (A→B→C becomes A→C)
-    console.log('\n🔗 Detecting and simplifying debt chains...')
+
     let chainsFound = 0
 
     // Keep simplifying until no more chains are found
@@ -121,7 +107,7 @@ export function simplifyDebts(transactions: Transaction[]): Debt[] {
                     if (transferAmount < 0.01) continue
 
                     chainsFound++
-                    console.log(`  Chain ${chainsFound}: ${debtorA}→${intermediaryB}→${creditorC} (transfer ${transferAmount.toFixed(2)})`)
+
 
                     // Transfer debt: A now owes C directly
                     addDebt(debtorA, creditorC, transferAmount)
@@ -145,7 +131,7 @@ export function simplifyDebts(transactions: Transaction[]): Debt[] {
         }
     }
 
-    console.log(`  Found and simplified ${chainsFound} chains`)
+
 
     // Step 4: Convert to Debt array
     const result: Debt[] = []
@@ -162,10 +148,7 @@ export function simplifyDebts(transactions: Transaction[]): Debt[] {
         })
     })
 
-    console.log('\n✅ FINAL SIMPLIFIED DEBTS:')
-    result.forEach((d, i) => {
-        console.log(`  ${i + 1}. ${d.from} → ${d.to}: R$ ${d.amount.toFixed(2)}`)
-    })
+
 
     return result
 }

@@ -29,8 +29,8 @@ const normalizeDate = (value: string) => {
   }
 }
 
-const formatBalance = (value: number) =>
-  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value)
+const balanceCurrencyFormatter = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" })
+const formatBalance = (value: number) => balanceCurrencyFormatter.format(value)
 
 const formatAxisLabel = (value: number) => {
   const absValue = Math.abs(value)
