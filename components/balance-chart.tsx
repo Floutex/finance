@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn, getUserColor } from "@/components/ui/utils"
+import { AnimatedNumber } from "@/components/ui/animated-number"
 
 type BalancePoint = {
   date: string
@@ -238,7 +239,17 @@ export const BalanceChart = (props: { series: BalancePoint[]; currentUser?: stri
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between lg:gap-4">
           <div className="flex flex-col gap-1">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Período ativo</span>
-            <h2 className="text-xl font-semibold text-foreground md:text-2xl">{periodLabel}</h2>
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+              <h2 className="text-xl font-semibold text-foreground md:text-2xl">{periodLabel}</h2>
+              {variationSummary && (
+                <div className={cn("flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold", variationSummary.change >= 0 ? "bg-emerald-500/10 text-emerald-400" : "bg-destructive/10 text-destructive")}>
+                  <AnimatedNumber value={variationSummary.change} formatFn={formatSignedCurrency} />
+                  {variationSummary.percentChange !== null && (
+                    <span className="opacity-80">({formatSignedPercent(variationSummary.percentChange)})</span>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
           <nav className="flex flex-wrap items-center gap-2 lg:gap-3" aria-label="Filtros rápidos de período">
             <div className="flex flex-wrap gap-1.5 rounded-full bg-muted/50 p-1 lg:gap-2">
@@ -321,20 +332,6 @@ export const BalanceChart = (props: { series: BalancePoint[]; currentUser?: stri
       </header>
 
       <section className="relative" aria-label="Gráfico de evolução do saldo">
-        {variationSummary && (
-          <aside className="pointer-events-none absolute right-3 top-2 z-20 min-w-[140px] rounded-xl border border-border/70 bg-background/90 px-3 py-2.5 text-right shadow-lg backdrop-blur sm:right-4 sm:min-w-[160px] sm:rounded-2xl sm:px-4 sm:py-3 lg:right-5">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:text-[11px]">Variação</p>
-            <p className={cn("text-base font-semibold sm:text-lg lg:text-xl", variationSummary.change >= 0 ? "text-emerald-400" : "text-destructive")}>
-              {formatSignedCurrency(variationSummary.change)}
-            </p>
-            {variationSummary.percentChange !== null && (
-              <p className="text-xs font-medium text-foreground sm:text-sm">{formatSignedPercent(variationSummary.percentChange)}</p>
-            )}
-            <p className="text-[10px] text-muted-foreground sm:text-[11px]">
-              {format(parseISO(variationSummary.startDate), "dd/MM")} — {format(parseISO(variationSummary.endDate), "dd/MM")}
-            </p>
-          </aside>
-        )}
 
         <ResponsiveContainer width="100%" height={320}>
           <AreaChart data={chartData} margin={{ top: 20, right: 20, bottom: 20, left: 0 }}>

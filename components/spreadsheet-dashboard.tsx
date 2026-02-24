@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
 import { CategorySelector, PayerSelector } from "@/components/transaction-selectors"
 import { cn, getUserColorClasses } from "@/components/ui/utils"
+import { AnimatedNumber } from "@/components/ui/animated-number"
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -1131,12 +1132,14 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
             </CardHeader>
             <CardContent>
               <div className="flex flex-col gap-1">
-                <span className={cn(
-                  "text-3xl font-bold tracking-tight transition-all duration-300 md:text-4xl",
-                  totalBalance >= 0 ? "text-emerald-500" : "text-red-500"
-                )}>
-                  {formatCurrency(totalBalance)}
-                </span>
+                <AnimatedNumber
+                  value={totalBalance}
+                  formatFn={formatCurrency}
+                  className={cn(
+                    "text-3xl font-bold tracking-tight transition-all duration-300 md:text-4xl",
+                    totalBalance >= 0 ? "text-emerald-500" : "text-red-500"
+                  )}
+                />
                 <p className="text-xs text-muted-foreground">
                   {totalBalance > 0
                     ? "Você tem a receber • Balanço geral de dívidas"
@@ -1161,7 +1164,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
               </div>
             </CardContent>
             <div className="flex justify-center gap-2 pb-4 text-xs text-muted-foreground">
-              <span>Total visível: {formatCurrency(totalCategoryAmount)}</span>
+              <span>Total visível: <AnimatedNumber value={totalCategoryAmount} formatFn={formatCurrency} /></span>
             </div>
           </Card>
 
@@ -1172,7 +1175,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
               <TrendingUp className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(periodStats.mySpend)}</div>
+              <div className="text-2xl font-bold"><AnimatedNumber value={periodStats.mySpend} formatFn={formatCurrency} /></div>
               <p className="text-xs text-muted-foreground">
                 Você pagou no período selecionado
               </p>
@@ -1183,7 +1186,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                 />
               </div>
               <p className="mt-1 text-[10px] text-muted-foreground text-right">
-                {Math.round((periodStats.mySpend / (periodStats.totalSpend || 1)) * 100)}% do total ({formatCurrency(periodStats.totalSpend)})
+                {Math.round((periodStats.mySpend / (periodStats.totalSpend || 1)) * 100)}% do total (<AnimatedNumber value={periodStats.totalSpend} formatFn={formatCurrency} />)
               </p>
             </CardContent>
           </Card>
@@ -1195,13 +1198,13 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
               <Calendar className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(currentMonthStats.mySpend)}</div>
+              <div className="text-2xl font-bold"><AnimatedNumber value={currentMonthStats.mySpend} formatFn={formatCurrency} /></div>
               <p className="text-xs text-muted-foreground">
                 Seus pagamentos este mês
               </p>
               <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
                 <span>{currentMonthStats.count} lançamentos</span>
-                <span>Total: {formatCurrency(currentMonthStats.totalSpend)}</span>
+                <span>Total: <AnimatedNumber value={currentMonthStats.totalSpend} formatFn={formatCurrency} /></span>
               </div>
             </CardContent>
           </Card>
@@ -1287,264 +1290,268 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
         </section>
       </div>
 
-      {requestDialogOpen && (
-        <div className="fixed inset-0 z-50">
-          <div
-            className="absolute inset-0 bg-background/80 backdrop-blur-sm"
-            onClick={handleCloseRequestDialog}
-            aria-hidden="true"
-          />
-          <div className="relative flex h-full items-center justify-center p-4" onKeyDown={handleRequestDialogKeyDown}>
+      {
+        requestDialogOpen && (
+          <div className="fixed inset-0 z-50">
             <div
-              className="w-full max-w-xl rounded-lg border border-border bg-card p-6 shadow-lg outline-none"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="request-dialog-title"
-              aria-describedby="request-dialog-description"
-            >
-              <div className="flex items-center justify-between">
-                <p id="request-dialog-title" className="text-lg font-semibold flex items-center gap-2">
-                  <HandCoins className="h-5 w-5 text-amber-500" />
-                  Solicitar Dinheiro
-                </p>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleCloseRequestDialog}
-                  disabled={requestPending}
-                  aria-label="Fechar solicitação de dinheiro"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-              <p id="request-dialog-description" className="mt-2 text-sm text-muted-foreground">
-                Envie uma notificação para os outros membros solicitando um pagamento.
-              </p>
-              <form onSubmit={handleSubmitRequest} className="mt-6 space-y-4" noValidate>
-                <div className="space-y-2">
-                  <Label htmlFor="request-description">Descrição da Solicitação</Label>
-                  <Input
-                    ref={requestFirstFieldRef}
-                    id="request-description"
-                    name="description"
-                    autoComplete="off"
-                    value={requestForm.description}
-                    onChange={(e) => setRequestForm(prev => ({ ...prev, description: e.target.value }))}
-                    placeholder="Ex: Conta de luz, Almoço..."
-                    required
-                  />
+              className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+              onClick={handleCloseRequestDialog}
+              aria-hidden="true"
+            />
+            <div className="relative flex h-full items-center justify-center p-4" onKeyDown={handleRequestDialogKeyDown}>
+              <div
+                className="w-full max-w-xl rounded-lg border border-border bg-card p-6 shadow-lg outline-none"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="request-dialog-title"
+                aria-describedby="request-dialog-description"
+              >
+                <div className="flex items-center justify-between">
+                  <p id="request-dialog-title" className="text-lg font-semibold flex items-center gap-2">
+                    <HandCoins className="h-5 w-5 text-amber-500" />
+                    Solicitar Dinheiro
+                  </p>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleCloseRequestDialog}
+                    disabled={requestPending}
+                    aria-label="Fechar solicitação de dinheiro"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <p id="request-dialog-description" className="mt-2 text-sm text-muted-foreground">
+                  Envie uma notificação para os outros membros solicitando um pagamento.
+                </p>
+                <form onSubmit={handleSubmitRequest} className="mt-6 space-y-4" noValidate>
                   <div className="space-y-2">
-                    <Label htmlFor="request-amount">Valor total</Label>
+                    <Label htmlFor="request-description">Descrição da Solicitação</Label>
                     <Input
-                      id="request-amount"
+                      ref={requestFirstFieldRef}
+                      id="request-description"
+                      name="description"
+                      autoComplete="off"
+                      value={requestForm.description}
+                      onChange={(e) => setRequestForm(prev => ({ ...prev, description: e.target.value }))}
+                      placeholder="Ex: Conta de luz, Almoço..."
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="request-amount">Valor total</Label>
+                      <Input
+                        id="request-amount"
+                        name="amount"
+                        autoComplete="off"
+                        inputMode="decimal"
+                        placeholder="0,00"
+                        value={requestForm.amount}
+                        onChange={(e) => setRequestForm(prev => ({ ...prev, amount: e.target.value }))}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="request-date">Data</Label>
+                      <Input
+                        id="request-date"
+                        type="date"
+                        name="date"
+                        value={requestForm.date}
+                        onChange={(e) => setRequestForm(prev => ({ ...prev, date: e.target.value }))}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="request-pix">Chave PIX (Opcional)</Label>
+                    <Input
+                      id="request-pix"
+                      name="pix"
+                      autoComplete="off"
+                      placeholder="Celular, CPF, Email ou Aleatória..."
+                      value={requestForm.pix}
+                      onChange={(e) => setRequestForm(prev => ({ ...prev, pix: e.target.value }))}
+                    />
+                  </div>
+                  <div className="flex justify-end pt-2">
+                    <Button type="submit" disabled={requestPending || !isRequestFormValid} className="bg-amber-500 hover:bg-amber-600 text-black border-amber-500/50" aria-busy={requestPending}>
+                      {requestPending ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                          Enviando...
+                        </>
+                      ) : (
+                        <>
+                          <Send className="mr-2 h-4 w-4" aria-hidden="true" />
+                          Enviar Solicitação
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+                {error && (
+                  <p className="mt-4 text-sm text-destructive" role="alert">
+                    {error}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+      {
+        createDialogOpen && (
+          <div className="fixed inset-0 z-50">
+            <div
+              className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+              onClick={handleCloseCreateDialog}
+              aria-hidden="true"
+            />
+            <div className="relative flex h-full items-center justify-center p-4" onKeyDown={handleCreateDialogKeyDown}>
+              <div
+                className="w-full max-w-3xl rounded-lg border border-border bg-card p-6 shadow-lg outline-none"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={createDialogTitleId}
+                aria-describedby={createDialogDescriptionId}
+              >
+                <div className="flex items-center justify-between">
+                  <p id={createDialogTitleId} className="text-lg font-semibold">
+                    Adicionar transação
+                  </p>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleCloseCreateDialog}
+                    disabled={createPending}
+                    aria-label="Fechar formulário de criação"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+                <p id={createDialogDescriptionId} className="mt-2 text-sm text-muted-foreground">
+                  Informe os campos obrigatórios. Valores aceitam vírgula ou ponto.
+                </p>
+                <form onSubmit={handleCreate} className="mt-6 grid gap-4 md:grid-cols-2" noValidate>
+                  <div className="space-y-2">
+                    <Label htmlFor="description">Descrição</Label>
+                    <Input
+                      ref={createFirstFieldRef}
+                      id="description"
+                      name="description"
+                      autoComplete="off"
+                      value={createForm.description}
+                      onChange={handleInputChange}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="category">Categoria</Label>
+                    <CategorySelector
+                      value={createForm.category}
+                      onChange={(value) => setCreateForm(prev => ({ ...prev, category: value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="paid_by">Pago por</Label>
+                    <PayerSelector
+                      value={createForm.paid_by}
+                      onChange={(value) => setCreateForm(prev => ({ ...prev, paid_by: value }))}
+                      currentUser={currentUser}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="date">Data</Label>
+                    <Input
+                      id="date"
+                      name="date"
+                      type="date"
+                      value={createForm.date}
+                      onChange={handleInputChange}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="amount">Valor total</Label>
+                    <Input
+                      id="amount"
                       name="amount"
                       autoComplete="off"
                       inputMode="decimal"
                       placeholder="0,00"
-                      value={requestForm.amount}
-                      onChange={(e) => setRequestForm(prev => ({ ...prev, amount: e.target.value }))}
-                      required
+                      value={createForm.amount}
+                      onChange={handleInputChange}
+                      aria-invalid={createAmountInvalid}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="request-date">Data</Label>
-                    <Input
-                      id="request-date"
-                      type="date"
-                      name="date"
-                      value={requestForm.date}
-                      onChange={(e) => setRequestForm(prev => ({ ...prev, date: e.target.value }))}
-                      required
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="request-pix">Chave PIX (Opcional)</Label>
-                  <Input
-                    id="request-pix"
-                    name="pix"
-                    autoComplete="off"
-                    placeholder="Celular, CPF, Email ou Aleatória..."
-                    value={requestForm.pix}
-                    onChange={(e) => setRequestForm(prev => ({ ...prev, pix: e.target.value }))}
-                  />
-                </div>
-                <div className="flex justify-end pt-2">
-                  <Button type="submit" disabled={requestPending || !isRequestFormValid} className="bg-amber-500 hover:bg-amber-600 text-black border-amber-500/50" aria-busy={requestPending}>
-                    {requestPending ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-                        Enviando...
-                      </>
-                    ) : (
-                      <>
-                        <Send className="mr-2 h-4 w-4" aria-hidden="true" />
-                        Enviar Solicitação
-                      </>
+                    <Label>Participantes</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {PARTICIPANTS.map(participant => {
+                        const isSelected = createForm.participants.includes(participant)
+                        return (
+                          <label
+                            key={participant}
+                            className={cn(
+                              "flex items-center gap-1.5 cursor-pointer rounded-full px-3 py-1.5 text-sm font-medium transition-all duration-200 border",
+                              isSelected
+                                ? getUserColorClasses(participant)
+                                : "bg-muted/30 text-muted-foreground border-border/50 hover:bg-muted/50"
+                            )}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={(e) => {
+                                const checked = e.target.checked
+                                setCreateForm(prev => {
+                                  const current = prev.participants
+                                  if (checked) return { ...prev, participants: [...current, participant] }
+                                  return { ...prev, participants: current.filter(p => p !== participant) }
+                                })
+                              }}
+                              className="sr-only"
+                            />
+                            {participant}
+                          </label>
+                        )
+                      })}
+                    </div>
+                    {createForm.participants.length === 0 && (
+                      <p className="text-xs text-destructive">Selecione pelo menos um participante</p>
                     )}
-                  </Button>
-                </div>
-              </form>
-              {error && (
-                <p className="mt-4 text-sm text-destructive" role="alert">
-                  {error}
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {createDialogOpen && (
-        <div className="fixed inset-0 z-50">
-          <div
-            className="absolute inset-0 bg-background/80 backdrop-blur-sm"
-            onClick={handleCloseCreateDialog}
-            aria-hidden="true"
-          />
-          <div className="relative flex h-full items-center justify-center p-4" onKeyDown={handleCreateDialogKeyDown}>
-            <div
-              className="w-full max-w-3xl rounded-lg border border-border bg-card p-6 shadow-lg outline-none"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby={createDialogTitleId}
-              aria-describedby={createDialogDescriptionId}
-            >
-              <div className="flex items-center justify-between">
-                <p id={createDialogTitleId} className="text-lg font-semibold">
-                  Adicionar transação
-                </p>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleCloseCreateDialog}
-                  disabled={createPending}
-                  aria-label="Fechar formulário de criação"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
+                  </div>
+                  <div className="md:col-span-2 flex justify-end">
+                    <Button type="submit" disabled={createPending || !isCreateFormValid} aria-busy={createPending}>
+                      {createPending ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                          Salvando...
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
+                          Adicionar transação
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+                {error && (
+                  <p className="mt-4 text-sm text-destructive" role="alert">
+                    {error}
+                  </p>
+                )}
               </div>
-              <p id={createDialogDescriptionId} className="mt-2 text-sm text-muted-foreground">
-                Informe os campos obrigatórios. Valores aceitam vírgula ou ponto.
-              </p>
-              <form onSubmit={handleCreate} className="mt-6 grid gap-4 md:grid-cols-2" noValidate>
-                <div className="space-y-2">
-                  <Label htmlFor="description">Descrição</Label>
-                  <Input
-                    ref={createFirstFieldRef}
-                    id="description"
-                    name="description"
-                    autoComplete="off"
-                    value={createForm.description}
-                    onChange={handleInputChange}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="category">Categoria</Label>
-                  <CategorySelector
-                    value={createForm.category}
-                    onChange={(value) => setCreateForm(prev => ({ ...prev, category: value }))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="paid_by">Pago por</Label>
-                  <PayerSelector
-                    value={createForm.paid_by}
-                    onChange={(value) => setCreateForm(prev => ({ ...prev, paid_by: value }))}
-                    currentUser={currentUser}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="date">Data</Label>
-                  <Input
-                    id="date"
-                    name="date"
-                    type="date"
-                    value={createForm.date}
-                    onChange={handleInputChange}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="amount">Valor total</Label>
-                  <Input
-                    id="amount"
-                    name="amount"
-                    autoComplete="off"
-                    inputMode="decimal"
-                    placeholder="0,00"
-                    value={createForm.amount}
-                    onChange={handleInputChange}
-                    aria-invalid={createAmountInvalid}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Participantes</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {PARTICIPANTS.map(participant => {
-                      const isSelected = createForm.participants.includes(participant)
-                      return (
-                        <label
-                          key={participant}
-                          className={cn(
-                            "flex items-center gap-1.5 cursor-pointer rounded-full px-3 py-1.5 text-sm font-medium transition-all duration-200 border",
-                            isSelected
-                              ? getUserColorClasses(participant)
-                              : "bg-muted/30 text-muted-foreground border-border/50 hover:bg-muted/50"
-                          )}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={(e) => {
-                              const checked = e.target.checked
-                              setCreateForm(prev => {
-                                const current = prev.participants
-                                if (checked) return { ...prev, participants: [...current, participant] }
-                                return { ...prev, participants: current.filter(p => p !== participant) }
-                              })
-                            }}
-                            className="sr-only"
-                          />
-                          {participant}
-                        </label>
-                      )
-                    })}
-                  </div>
-                  {createForm.participants.length === 0 && (
-                    <p className="text-xs text-destructive">Selecione pelo menos um participante</p>
-                  )}
-                </div>
-                <div className="md:col-span-2 flex justify-end">
-                  <Button type="submit" disabled={createPending || !isCreateFormValid} aria-busy={createPending}>
-                    {createPending ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-                        Salvando...
-                      </>
-                    ) : (
-                      <>
-                        <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
-                        Adicionar transação
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </form>
-              {error && (
-                <p className="mt-4 text-sm text-destructive" role="alert">
-                  {error}
-                </p>
-              )}
             </div>
-          </div>
-        </div >
-      )}
+          </div >
+        )
+      }
 
       {
         uploadDialogOpen && (
