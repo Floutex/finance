@@ -1215,92 +1215,59 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
 
       <div className="space-y-6">
         {/* ── Global Date Range Selector ── */}
-        <div className="flex flex-col gap-4 rounded-2xl border border-border/50 bg-black/20 p-4 backdrop-blur-xl animate-fade-in sm:p-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-col gap-1">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Período do Dashboard</span>
-              <p className="text-xs text-muted-foreground">Selecione o período para visualizar todos os dados</p>
-            </div>
-            <nav className="flex flex-wrap items-center gap-2" aria-label="Filtros rápidos de período">
-              <div className="flex flex-wrap gap-1.5 rounded-full bg-muted/50 p-1">
-                {(["1M", "3M", "6M", "1A", "ALL"] as const).map(range => (
-                  <Button
-                    key={range}
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    aria-pressed={activeRange === range}
-                    className={cn(
-                      "h-8 rounded-full px-3 text-xs font-semibold transition",
-                      activeRange === range
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    )}
-                    onClick={() => applyQuickRange(range)}
-                  >
-                    {range === "ALL" ? "Tudo" : range}
-                  </Button>
-                ))}
-              </div>
+        <div className="flex flex-wrap items-center gap-3 animate-fade-in">
+          <div className="flex flex-wrap gap-1.5 rounded-full bg-muted/50 p-1">
+            {(["1M", "3M", "6M", "1A", "ALL"] as const).map(range => (
               <Button
+                key={range}
                 type="button"
-                variant="ghost"
                 size="sm"
-                disabled={!startDate && !endDate && !activeRange}
-                onClick={() => { setStartDate(""); setEndDate(""); setActiveRange(null) }}
+                variant="ghost"
+                aria-pressed={activeRange === range}
                 className={cn(
-                  "h-8 rounded-full border px-3 text-xs font-semibold transition",
-                  (startDate || endDate || activeRange)
-                    ? "border-primary/60 bg-primary/10 text-primary hover:bg-primary/20"
-                    : "border-dashed border-border text-muted-foreground"
+                  "h-8 rounded-full px-3 text-xs font-semibold transition",
+                  activeRange === range
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
                 )}
+                onClick={() => applyQuickRange(range)}
               >
-                Limpar
+                {range === "ALL" ? "Tudo" : range}
               </Button>
-            </nav>
+            ))}
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-3">
-            <div className="flex flex-col gap-1">
-              <label htmlFor="global-start-date" className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Início</label>
-              <Input
-                id="global-start-date"
-                type="date"
-                className="h-10 rounded-xl border-border/50 bg-black/40 text-sm sm:w-40"
-                value={startDate}
-                min={dateRange.min}
-                max={endDate || dateRange.max}
-                onChange={e => handleStartDateChange(e.target.value)}
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="global-end-date" className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Fim</label>
-              <Input
-                id="global-end-date"
-                type="date"
-                className="h-10 rounded-xl border-border/50 bg-black/40 text-sm sm:w-40"
-                value={endDate}
-                min={startDate || dateRange.min}
-                max={dateRange.max}
-                onChange={e => handleEndDateChange(e.target.value)}
-              />
-            </div>
-            <span className="text-xs text-muted-foreground self-center">{sortedTransactions.length} transações no período</span>
-          </div>
+          <Input
+            id="global-start-date"
+            type="date"
+            className="h-8 rounded-xl border-border/50 bg-black/40 text-sm w-36"
+            value={startDate}
+            min={dateRange.min}
+            max={endDate || dateRange.max}
+            onChange={e => handleStartDateChange(e.target.value)}
+          />
+          <span className="text-muted-foreground/50 text-xs">→</span>
+          <Input
+            id="global-end-date"
+            type="date"
+            className="h-8 rounded-xl border-border/50 bg-black/40 text-sm w-36"
+            value={endDate}
+            min={startDate || dateRange.min}
+            max={dateRange.max}
+            onChange={e => handleEndDateChange(e.target.value)}
+          />
+          <span className="text-xs text-muted-foreground">{sortedTransactions.length} transações</span>
         </div>
 
         {/* ── Stats Grid ── */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2">
           {/* Main Hero Card: Saldo Total */}
           <Card
             variant="highlight"
-            className="relative overflow-hidden md:col-span-2 group animate-scale-in"
+            className="relative overflow-hidden group animate-scale-in"
           >
             <div className={`absolute -right-6 -top-6 h-32 w-32 rounded-full opacity-10 blur-3xl transition-all duration-500 group-hover:opacity-20 ${totalBalance >= 0 ? "bg-emerald-500" : "bg-red-500"}`} />
-
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Saldo Total
-              </CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Saldo Total</CardTitle>
               <Wallet className={`h-4 w-4 ${totalBalance >= 0 ? "text-emerald-500" : "text-red-500"}`} />
             </CardHeader>
             <CardContent>
@@ -1335,9 +1302,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold"><AnimatedNumber value={periodStats.mySpend} formatFn={formatCurrency} animateOnMount duration={1000} delay={300} /></div>
-              <p className="text-xs text-muted-foreground">
-                Você pagou no período selecionado
-              </p>
+              <p className="text-xs text-muted-foreground">Você pagou no período selecionado</p>
               <div className="mt-3 h-1 w-full rounded-full bg-border">
                 <div
                   className="h-full rounded-full bg-primary transition-all duration-500"
@@ -1349,85 +1314,54 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
               </p>
             </CardContent>
           </Card>
-
-          {/* Current Month Stats */}
-          <Card className="animate-slide-left [animation-delay:450ms]">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Em {monthLabel}</CardTitle>
-              <Calendar className="h-4 w-4 text-primary" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold"><AnimatedNumber value={currentMonthStats.mySpend} formatFn={formatCurrency} animateOnMount duration={1000} delay={450} /></div>
-              <p className="text-xs text-muted-foreground">
-                Seus pagamentos este mês
-              </p>
-              <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-                <span>{currentMonthStats.count} lançamentos</span>
-                <span>Total: <AnimatedNumber value={currentMonthStats.totalSpend} formatFn={formatCurrency} animateOnMount delay={450} /></span>
-              </div>
-            </CardContent>
-          </Card>
         </div>
 
-        {/* ── Charts Section ── */}
-        <div className="grid gap-6 lg:grid-cols-2">
-          {/* Gastos por Categoria (seus) */}
-          <Card className="flex flex-col overflow-hidden animate-blur-in [animation-delay:150ms]">
-            <CardHeader className="items-center pb-0">
-              <CardTitle className="text-sm font-medium">Meus Gastos por Categoria</CardTitle>
-              <CardDescription>Distribuição dos seus pagamentos</CardDescription>
-            </CardHeader>
-            <CardContent className="flex-1 pb-0">
-              <div className="mx-auto aspect-square max-h-[250px]">
+        {/* ── 3 Pie Charts in one card ── */}
+        <Card className="overflow-hidden animate-blur-in [animation-delay:150ms]">
+          <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-border/50">
+            {/* Meus Gastos por Categoria */}
+            <div className="flex flex-col items-center p-4">
+              <p className="text-sm font-medium mb-1">Meus Gastos por Categoria</p>
+              <div className="w-full max-w-[220px]">
                 <CategoryPieChart data={categoryTotals} />
               </div>
-            </CardContent>
-            <div className="flex justify-center gap-2 pb-4 text-xs text-muted-foreground">
-              <span>Total: <AnimatedNumber value={totalCategoryAmount} formatFn={formatCurrency} animateOnMount delay={150} /></span>
+              <p className="text-xs text-muted-foreground mt-2">
+                Total: <AnimatedNumber value={totalCategoryAmount} formatFn={formatCurrency} animateOnMount delay={150} />
+              </p>
             </div>
-          </Card>
 
-          {/* Gastos por Categoria Geral */}
-          <Card className="flex flex-col overflow-hidden animate-blur-in [animation-delay:200ms]">
-            <CardHeader className="items-center pb-0">
-              <CardTitle className="text-sm font-medium">Gastos por Categoria (Geral)</CardTitle>
-              <CardDescription>Todas as transações no período</CardDescription>
-            </CardHeader>
-            <CardContent className="flex-1 pb-0">
-              <div className="mx-auto aspect-square max-h-[250px]">
+            {/* Gastos por Categoria Geral */}
+            <div className="flex flex-col items-center p-4">
+              <p className="text-sm font-medium mb-1">Gastos por Categoria (Geral)</p>
+              <div className="w-full max-w-[220px]">
                 <CategoryPieChart data={globalCategoryTotals} />
               </div>
-            </CardContent>
-            <div className="flex justify-center gap-2 pb-4 text-xs text-muted-foreground">
-              <span>Total: <AnimatedNumber value={totalGlobalCategoryAmount} formatFn={formatCurrency} animateOnMount delay={200} /></span>
+              <p className="text-xs text-muted-foreground mt-2">
+                Total: <AnimatedNumber value={totalGlobalCategoryAmount} formatFn={formatCurrency} animateOnMount delay={200} />
+              </p>
             </div>
-          </Card>
 
-          {/* Maiores Transações no Período */}
-          <Card className="flex flex-col overflow-hidden animate-blur-in [animation-delay:250ms]">
-            <CardHeader className="items-center pb-0">
-              <CardTitle className="text-sm font-medium">Maiores Transações</CardTitle>
-              <CardDescription>Top 10 transações no período</CardDescription>
-            </CardHeader>
-            <CardContent className="flex-1 pb-0">
-              <div className="mx-auto aspect-square max-h-[250px]">
+            {/* Maiores Transações */}
+            <div className="flex flex-col items-center p-4">
+              <p className="text-sm font-medium mb-1">Maiores Transações</p>
+              <div className="w-full max-w-[220px]">
                 <CategoryPieChart data={topTransactions} />
               </div>
-            </CardContent>
-            <div className="flex justify-center gap-2 pb-4 text-xs text-muted-foreground">
-              <span>Soma: <AnimatedNumber value={totalTopTransactions} formatFn={formatCurrency} animateOnMount delay={250} /></span>
+              <p className="text-xs text-muted-foreground mt-2">
+                Soma: <AnimatedNumber value={totalTopTransactions} formatFn={formatCurrency} animateOnMount delay={250} />
+              </p>
             </div>
-          </Card>
-
-          {/* Balance Chart */}
-          <div className="animate-rise-up [animation-delay:300ms]">
-            <BalanceChart series={chartSeries} currentUser={currentUser} startDate={startDate || undefined} endDate={endDate || undefined} />
           </div>
+        </Card>
+
+        {/* ── Balance Chart (linha inteira) ── */}
+        <div className="animate-rise-up [animation-delay:300ms]">
+          <BalanceChart series={chartSeries} currentUser={currentUser} startDate={startDate || undefined} endDate={endDate || undefined} />
         </div>
 
         {/* ── Solicitações de Dinheiro (Collapsible/Conditional) ── */}
         <section className="space-y-4 animate-slide-up-fade [animation-delay:750ms]">
-          {pendingRequests.length > 0 ? (
+          {pendingRequests.length > 0 && (
             <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6 backdrop-blur-sm">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
@@ -1481,18 +1415,6 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                   </div>
                 ))}
               </div>
-            </div>
-          ) : (
-            <div className="flex justify-end">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={handleOpenRequestDialog}
-                className="text-muted-foreground hover:text-amber-400 transition-colors"
-              >
-                <HandCoins className="mr-2 h-4 w-4" />
-                Solicitar Dinheiro
-              </Button>
             </div>
           )}
         </section>
@@ -2140,28 +2062,28 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
               </div>
 
               <div className="flex items-center gap-3">
-                <div className="relative">
+                <div className="relative flex">
+                  {/* Main action: open create dialog directly */}
                   <Button
                     ref={createButtonRef}
-                    onClick={() => setAddMenuOpen(!addMenuOpen)}
-                    className="h-10 rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all hover:scale-105 active:scale-95"
+                    onClick={handleOpenCreateDialog}
+                    className="h-10 rounded-l-xl rounded-r-none bg-primary text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all hover:scale-105 active:scale-95 pr-3"
                   >
                     <Plus className="mr-2 h-4 w-4" />
                     Nova Transação
-                    <ChevronDown className="ml-2 h-4 w-4 opacity-70" />
+                  </Button>
+                  {/* Chevron: opens dropdown without manual option */}
+                  <Button
+                    onClick={() => setAddMenuOpen(!addMenuOpen)}
+                    className="h-10 rounded-l-none rounded-r-xl bg-primary text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all border-l border-primary-foreground/20 px-2"
+                  >
+                    <ChevronDown className="h-4 w-4 opacity-70" />
                   </Button>
 
                   {addMenuOpen && (
                     <>
                       <div className="fixed inset-0 z-10" onClick={() => setAddMenuOpen(false)} />
                       <div className="absolute right-0 top-full z-20 mt-2 w-56 overflow-hidden rounded-2xl border border-border/50 bg-black/90 p-1 shadow-xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-200">
-                        <button
-                          onClick={() => { setAddMenuOpen(false); handleOpenCreateDialog() }}
-                          className="flex w-full items-center rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-white/10"
-                        >
-                          <Plus className="mr-3 h-4 w-4 text-primary" />
-                          Manual
-                        </button>
                         <button
                           onClick={() => { setAddMenuOpen(false); handleOpenUploadDialog() }}
                           className="flex w-full items-center rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-white/10"

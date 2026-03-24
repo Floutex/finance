@@ -10,7 +10,7 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: "Finanças do Casal",
+  title: "Gastos Compartilhados",
   description: "Dashboard compartilhado de despesas",
 }
 
