@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTransactions } from "@/hooks/use-transactions"
 import { format, isSameMonth, parseISO } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { getSupabaseClient, bulkDeleteByIds, bulkUpdateByIds } from "@/lib/supabase"
+import { getSupabaseClient, bulkDeleteByIds, bulkUpdateByIds, getMonthlyIncomes } from "@/lib/supabase"
 import type { Tables, TablesInsert, TablesUpdate } from "@/lib/database.types"
 import { BalanceChart } from "@/components/balance-chart"
 import { CategoryPieChart } from "@/components/category-pie-chart"
@@ -43,6 +43,7 @@ import {
 } from "lucide-react"
 
 import { simplifyDebts } from "@/lib/debt-simplification"
+import { buildIncomeMap, calculateShares } from "@/lib/proportional-split"
 
 type Transaction = Tables<"shared_transactions">
 type TransactionInsert = TablesInsert<"shared_transactions">
@@ -174,6 +175,22 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
   const [requestPending, setRequestPending] = useState(false)
   const [markingPaidId, setMarkingPaidId] = useState<string | null>(null)
   const requestFirstFieldRef = useRef<HTMLInputElement>(null)
+
+  // Monthly incomes for proportional split
+  const [monthlyIncomesRaw, setMonthlyIncomesRaw] = useState<Tables<"monthly_incomes">[]>([])
+
+  useEffect(() => {
+    const loadIncomes = async () => {
+      const { data } = await getMonthlyIncomes()
+      if (data) setMonthlyIncomesRaw(data)
+    }
+    loadIncomes()
+  }, [])
+
+  const incomeMap = useMemo(() => {
+    const months = new Set(transactions.map(t => t.date.slice(0, 7)))
+    return buildIncomeMap(monthlyIncomesRaw, Array.from(months))
+  }, [monthlyIncomesRaw, transactions])
 
   // Helper to clear local error
   const setError = (err: string | null) => setLocalError(err)
@@ -382,9 +399,15 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
       const participants = transaction.participants ?? []
       if (participants.length === 0) return 0
       if (!participants.includes(currentUser)) return 0
-      return (transaction.amount ?? 0) / participants.length
+      const yearMonth = transaction.date.slice(0, 7)
+      const monthIncomes = incomeMap.get(yearMonth)
+      const shares = calculateShares(
+        { amount: transaction.amount ?? 0, participants },
+        monthIncomes
+      )
+      return shares.get(currentUser) ?? (transaction.amount ?? 0) / participants.length
     }
-  }, [currentUser])
+  }, [currentUser, incomeMap])
 
   const netBalance = useMemo(() => {
     return sortedTransactions.reduce((total, transaction) => total + (transaction.amount_owed ?? 0), 0)
@@ -476,21 +499,21 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
       const amount = t.amount ?? 0
       if (participants.length === 0) continue
 
-      const sharePerPerson = amount / participants.length
+      const yearMonth = t.date.slice(0, 7)
+      const monthIncomes = incomeMap.get(yearMonth)
+      const shares = calculateShares({ amount, participants }, monthIncomes)
+      const myShare = shares.get(currentUser) ?? (amount / participants.length)
+
       const userIsParticipant = participants.includes(currentUser)
       const userIsPayer = t.paid_by === currentUser
 
       if (userIsPayer && userIsParticipant) {
-        // User paid and participates: others owe user their shares
-        runningBalance += amount - sharePerPerson
+        runningBalance += amount - myShare
       } else if (userIsPayer && !userIsParticipant) {
-        // User paid but doesn't participate: all participants owe user
         runningBalance += amount
       } else if (!userIsPayer && userIsParticipant) {
-        // Someone else paid, user participates: user owes their share
-        runningBalance -= sharePerPerson
+        runningBalance -= myShare
       }
-      // else: user is neither payer nor participant — no effect
 
       dateBalanceMap.set(t.date, runningBalance)
     }
@@ -499,16 +522,17 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
       date,
       balance: Number(balance.toFixed(2))
     }))
-  }, [transactions, currentUser])
+  }, [transactions, currentUser, incomeMap])
 
   const simplifiedDebts = useMemo(() => {
     const allTransactions = transactions.map(t => ({
       paid_by: t.paid_by,
       amount: t.amount ?? 0,
-      participants: t.participants ?? ["Antônio", "Júlia"] // Default for legacy
+      participants: t.participants ?? ["Antônio", "Júlia"],
+      date: t.date
     }))
-    return simplifyDebts(allTransactions)
-  }, [transactions])
+    return simplifyDebts(allTransactions, incomeMap)
+  }, [transactions, incomeMap])
 
   const myDebts = simplifiedDebts.filter(d => d.from === currentUser || d.to === currentUser)
 

@@ -1,7 +1,10 @@
+import { calculateShares } from "./proportional-split"
+
 export interface Transaction {
     paid_by: string
     amount: number
     participants: string[]
+    date: string
 }
 
 export interface Debt {
@@ -10,7 +13,10 @@ export interface Debt {
     amount: number
 }
 
-export function simplifyDebts(transactions: Transaction[]): Debt[] {
+export function simplifyDebts(
+    transactions: Transaction[],
+    incomeMap?: Map<string, Map<string, number>>
+): Debt[] {
 
     // Step 1: Calculate pairwise debts (who owes whom directly from transactions)
     const pairwiseDebts = new Map<string, Map<string, number>>()
@@ -26,12 +32,18 @@ export function simplifyDebts(transactions: Transaction[]): Debt[] {
     transactions.forEach((t, idx) => {
         if (!t.participants || t.participants.length === 0) return
 
-        const splitAmount = t.amount / t.participants.length
+        const yearMonth = t.date.slice(0, 7)
+        const monthIncomes = incomeMap?.get(yearMonth)
+        const shares = calculateShares(
+            { amount: t.amount, participants: t.participants },
+            monthIncomes
+        )
 
         // Each participant (except payer) owes their share to the payer
         t.participants.forEach(participant => {
             if (participant !== t.paid_by) {
-                addDebt(participant, t.paid_by, splitAmount)
+                const shareAmount = shares.get(participant) ?? (t.amount / t.participants.length)
+                addDebt(participant, t.paid_by, shareAmount)
             }
         })
 

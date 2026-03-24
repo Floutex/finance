@@ -42,6 +42,39 @@ export const getCategories = async () => {
   return await client.from("categories").select("*").order("name", { ascending: true })
 }
 
+export const getMonthlyIncomes = async () => {
+  const client = getSupabaseClient()
+  return await client.from("monthly_incomes").select("*").order("year_month", { ascending: false })
+}
+
+export const upsertMonthlyIncome = async (
+  person: string,
+  yearMonth: string,
+  amount: number,
+  isFixed: boolean
+) => {
+  const client = getSupabaseClient()
+  return await client
+    .from("monthly_incomes")
+    .upsert(
+      {
+        person,
+        year_month: yearMonth,
+        amount,
+        is_fixed: isFixed,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "person,year_month" }
+    )
+    .select("*")
+    .single()
+}
+
+export const deleteMonthlyIncome = async (id: string) => {
+  const client = getSupabaseClient()
+  return await client.from("monthly_incomes").delete().eq("id", id)
+}
+
 export const upsertCategory = async (name: string) => {
   const client = getSupabaseClient()
   const value = name.trim()

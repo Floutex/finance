@@ -59,6 +59,36 @@ export type Database = {
         }
         Relationships: []
       }
+      monthly_incomes: {
+        Row: {
+          id: string
+          person: string
+          year_month: string
+          amount: number
+          is_fixed: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          person: string
+          year_month: string
+          amount: number
+          is_fixed?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          person?: string
+          year_month?: string
+          amount?: number
+          is_fixed?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       shared_transactions: {
         Row: {
           amount: number | null
