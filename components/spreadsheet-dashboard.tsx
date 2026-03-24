@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTransactions } from "@/hooks/use-transactions"
-import { format, isSameMonth, parseISO } from "date-fns"
+import { format, isSameMonth, parseISO, subMonths, subYears } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { getSupabaseClient, bulkDeleteByIds, bulkUpdateByIds, getMonthlyIncomes } from "@/lib/supabase"
 import type { Tables, TablesInsert, TablesUpdate } from "@/lib/database.types"
@@ -130,6 +130,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
   const [search, setSearch] = useState("")
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
+  const [activeRange, setActiveRange] = useState<"1M" | "3M" | "6M" | "1A" | "ALL" | null>(null)
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc")
   const [createForm, setCreateForm] = useState<FormState>(() => initialFormState(currentUser))
@@ -388,8 +389,50 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
     setSearch("")
     setStartDate("")
     setEndDate("")
+    setActiveRange(null)
     searchInputRef.current?.focus()
   }
+
+  // Date range boundaries from all transactions
+  const dateRange = useMemo(() => {
+    if (userTransactions.length === 0) return { min: "", max: "" }
+    const dates = userTransactions.map(t => t.date).sort()
+    return { min: dates[0], max: dates[dates.length - 1] }
+  }, [userTransactions])
+
+  const applyQuickRange = useCallback((range: "1M" | "3M" | "6M" | "1A" | "ALL") => {
+    if (!dateRange.max) return
+    const lastDate = parseISO(dateRange.max)
+    const firstDate = parseISO(dateRange.min)
+
+    if (range === "ALL") {
+      setStartDate("")
+      setEndDate("")
+      setActiveRange(range)
+      return
+    }
+    let computedStart = firstDate
+    if (range === "1M") computedStart = subMonths(lastDate, 1)
+    else if (range === "3M") computedStart = subMonths(lastDate, 3)
+    else if (range === "6M") computedStart = subMonths(lastDate, 6)
+    else if (range === "1A") computedStart = subYears(lastDate, 1)
+    if (computedStart < firstDate) computedStart = firstDate
+    setStartDate(format(computedStart, "yyyy-MM-dd"))
+    setEndDate(format(lastDate, "yyyy-MM-dd"))
+    setActiveRange(range)
+  }, [dateRange])
+
+  const handleStartDateChange = useCallback((value: string) => {
+    setActiveRange(null)
+    setStartDate(value)
+    setEndDate(prev => (!prev || (value && prev < value)) ? value : prev)
+  }, [])
+
+  const handleEndDateChange = useCallback((value: string) => {
+    setActiveRange(null)
+    setEndDate(value)
+    setStartDate(prev => (!prev || (value && prev > value)) ? value : prev)
+  }, [])
   const handleClearSelection = () => {
     setSelectedRows([])
   }
@@ -465,6 +508,38 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
     }
     return categoryTotals.reduce((total, item) => total + item.total, 0)
   }, [categoryTotals])
+
+  // Gastos por categoria geral (todos os usuários, não apenas o currentUser)
+  const globalCategoryTotals = useMemo(() => {
+    const map = new Map<string, number>()
+    sortedTransactions.forEach(transaction => {
+      const key = normalizeText(transaction.category) || "Sem categoria"
+      const amount = transaction.amount ?? 0
+      map.set(key, (map.get(key) ?? 0) + amount)
+    })
+    return Array.from(map.entries())
+      .map(([category, total]) => ({ category, total }))
+      .sort((first, second) => second.total - first.total)
+  }, [sortedTransactions])
+
+  const totalGlobalCategoryAmount = useMemo(() => {
+    return globalCategoryTotals.reduce((total, item) => total + item.total, 0)
+  }, [globalCategoryTotals])
+
+  // Maiores transações no período
+  const topTransactions = useMemo(() => {
+    const top = [...sortedTransactions]
+      .sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0))
+      .slice(0, 10)
+    return top.map(t => ({
+      category: normalizeText(t.description) || "Sem descrição",
+      total: t.amount ?? 0
+    }))
+  }, [sortedTransactions])
+
+  const totalTopTransactions = useMemo(() => {
+    return topTransactions.reduce((total, item) => total + item.total, 0)
+  }, [topTransactions])
 
   const monthLabel = useMemo(() => capitalize(format(new Date(), "MMMM", { locale: ptBR })), [])
   const totalTransactions = sortedTransactions.length
@@ -1139,6 +1214,80 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
     <div className="space-y-8">
 
       <div className="space-y-6">
+        {/* ── Global Date Range Selector ── */}
+        <div className="flex flex-col gap-4 rounded-2xl border border-border/50 bg-black/20 p-4 backdrop-blur-xl animate-fade-in sm:p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-1">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Período do Dashboard</span>
+              <p className="text-xs text-muted-foreground">Selecione o período para visualizar todos os dados</p>
+            </div>
+            <nav className="flex flex-wrap items-center gap-2" aria-label="Filtros rápidos de período">
+              <div className="flex flex-wrap gap-1.5 rounded-full bg-muted/50 p-1">
+                {(["1M", "3M", "6M", "1A", "ALL"] as const).map(range => (
+                  <Button
+                    key={range}
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    aria-pressed={activeRange === range}
+                    className={cn(
+                      "h-8 rounded-full px-3 text-xs font-semibold transition",
+                      activeRange === range
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                    onClick={() => applyQuickRange(range)}
+                  >
+                    {range === "ALL" ? "Tudo" : range}
+                  </Button>
+                ))}
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={!startDate && !endDate && !activeRange}
+                onClick={() => { setStartDate(""); setEndDate(""); setActiveRange(null) }}
+                className={cn(
+                  "h-8 rounded-full border px-3 text-xs font-semibold transition",
+                  (startDate || endDate || activeRange)
+                    ? "border-primary/60 bg-primary/10 text-primary hover:bg-primary/20"
+                    : "border-dashed border-border text-muted-foreground"
+                )}
+              >
+                Limpar
+              </Button>
+            </nav>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-3">
+            <div className="flex flex-col gap-1">
+              <label htmlFor="global-start-date" className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Início</label>
+              <Input
+                id="global-start-date"
+                type="date"
+                className="h-10 rounded-xl border-border/50 bg-black/40 text-sm sm:w-40"
+                value={startDate}
+                min={dateRange.min}
+                max={endDate || dateRange.max}
+                onChange={e => handleStartDateChange(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label htmlFor="global-end-date" className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Fim</label>
+              <Input
+                id="global-end-date"
+                type="date"
+                className="h-10 rounded-xl border-border/50 bg-black/40 text-sm sm:w-40"
+                value={endDate}
+                min={startDate || dateRange.min}
+                max={dateRange.max}
+                onChange={e => handleEndDateChange(e.target.value)}
+              />
+            </div>
+            <span className="text-xs text-muted-foreground self-center">{sortedTransactions.length} transações no período</span>
+          </div>
+        </div>
+
         {/* ── Stats Grid ── */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {/* Main Hero Card: Saldo Total */}
@@ -1176,22 +1325,6 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
                 </p>
               </div>
             </CardContent>
-          </Card>
-
-          {/* Pie Chart Card */}
-          <Card className="md:col-span-2 md:row-span-2 flex flex-col overflow-hidden animate-blur-in [animation-delay:150ms]">
-            <CardHeader className="items-center pb-0">
-              <CardTitle className="text-sm font-medium">Gastos por Categoria</CardTitle>
-              <CardDescription>Distribuição dos seus pagamentos</CardDescription>
-            </CardHeader>
-            <CardContent className="flex-1 pb-0">
-              <div className="mx-auto aspect-square max-h-[250px]">
-                <CategoryPieChart data={categoryTotals} />
-              </div>
-            </CardContent>
-            <div className="flex justify-center gap-2 pb-4 text-xs text-muted-foreground">
-              <span>Total visível: <AnimatedNumber value={totalCategoryAmount} formatFn={formatCurrency} animateOnMount delay={150} /></span>
-            </div>
           </Card>
 
           {/* Period Stats: Total Gasto */}
@@ -1236,10 +1369,59 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
           </Card>
         </div>
 
-        {/* ── Charts & Main Visuals ── */}
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-3 animate-rise-up [animation-delay:600ms]">
-            <BalanceChart series={chartSeries} currentUser={currentUser} />
+        {/* ── Charts Section ── */}
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Gastos por Categoria (seus) */}
+          <Card className="flex flex-col overflow-hidden animate-blur-in [animation-delay:150ms]">
+            <CardHeader className="items-center pb-0">
+              <CardTitle className="text-sm font-medium">Meus Gastos por Categoria</CardTitle>
+              <CardDescription>Distribuição dos seus pagamentos</CardDescription>
+            </CardHeader>
+            <CardContent className="flex-1 pb-0">
+              <div className="mx-auto aspect-square max-h-[250px]">
+                <CategoryPieChart data={categoryTotals} />
+              </div>
+            </CardContent>
+            <div className="flex justify-center gap-2 pb-4 text-xs text-muted-foreground">
+              <span>Total: <AnimatedNumber value={totalCategoryAmount} formatFn={formatCurrency} animateOnMount delay={150} /></span>
+            </div>
+          </Card>
+
+          {/* Gastos por Categoria Geral */}
+          <Card className="flex flex-col overflow-hidden animate-blur-in [animation-delay:200ms]">
+            <CardHeader className="items-center pb-0">
+              <CardTitle className="text-sm font-medium">Gastos por Categoria (Geral)</CardTitle>
+              <CardDescription>Todas as transações no período</CardDescription>
+            </CardHeader>
+            <CardContent className="flex-1 pb-0">
+              <div className="mx-auto aspect-square max-h-[250px]">
+                <CategoryPieChart data={globalCategoryTotals} />
+              </div>
+            </CardContent>
+            <div className="flex justify-center gap-2 pb-4 text-xs text-muted-foreground">
+              <span>Total: <AnimatedNumber value={totalGlobalCategoryAmount} formatFn={formatCurrency} animateOnMount delay={200} /></span>
+            </div>
+          </Card>
+
+          {/* Maiores Transações no Período */}
+          <Card className="flex flex-col overflow-hidden animate-blur-in [animation-delay:250ms]">
+            <CardHeader className="items-center pb-0">
+              <CardTitle className="text-sm font-medium">Maiores Transações</CardTitle>
+              <CardDescription>Top 10 transações no período</CardDescription>
+            </CardHeader>
+            <CardContent className="flex-1 pb-0">
+              <div className="mx-auto aspect-square max-h-[250px]">
+                <CategoryPieChart data={topTransactions} />
+              </div>
+            </CardContent>
+            <div className="flex justify-center gap-2 pb-4 text-xs text-muted-foreground">
+              <span>Soma: <AnimatedNumber value={totalTopTransactions} formatFn={formatCurrency} animateOnMount delay={250} /></span>
+            </div>
+          </Card>
+
+          {/* Balance Chart */}
+          <div className="animate-rise-up [animation-delay:300ms]">
+            <BalanceChart series={chartSeries} currentUser={currentUser} startDate={startDate || undefined} endDate={endDate || undefined} />
           </div>
         </div>
 
@@ -1941,53 +2123,20 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
               </div>
             </div>
 
-            {/* Filters & Actions Row */}
+            {/* Actions Row */}
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div className="flex flex-wrap items-end gap-3">
-                <div className="w-full sm:w-auto">
-                  <Label htmlFor="startDate" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Período
-                  </Label>
-                  <div className="flex items-center gap-2">
-                    <div className="relative flex-1 sm:w-40">
-                      <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                      <Input
-                        id="startDate"
-                        type="date"
-                        value={startDate}
-                        onChange={event => setStartDate(event.target.value)}
-                        className="h-10 rounded-xl border-border/50 bg-black/40 pl-9 text-sm focus:bg-black/60"
-                      />
-                    </div>
-                    <span className="text-muted-foreground/50">→</span>
-                    <div className="relative flex-1 sm:w-40">
-                      <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                      <Input
-                        id="endDate"
-                        type="date"
-                        value={endDate}
-                        onChange={event => setEndDate(event.target.value)}
-                        className="h-10 rounded-xl border-border/50 bg-black/40 pl-9 text-sm focus:bg-black/60"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={handleResetFilters}
-                  disabled={!hasActiveFilters}
-                  className={cn(
-                    "h-10 px-4 rounded-xl transition-all",
-                    hasActiveFilters
-                      ? "bg-primary/10 text-primary hover:bg-primary/20"
-                      : "text-muted-foreground hover:bg-white/5"
-                  )}
-                >
-                  <FilterX className="mr-2 h-4 w-4" />
-                  Limpar
-                </Button>
+                {search.trim() && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => { setSearch(""); searchInputRef.current?.focus() }}
+                    className="h-10 px-4 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-all"
+                  >
+                    <FilterX className="mr-2 h-4 w-4" />
+                    Limpar busca
+                  </Button>
+                )}
               </div>
 
               <div className="flex items-center gap-3">
