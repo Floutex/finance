@@ -21,7 +21,9 @@ export async function GET() {
   }
 
   const debts = simplifyDebts(
-    (transactions ?? []).filter((t): t is typeof t & { amount: number } => t.paid_by != null && t.amount != null),
+    (transactions ?? [])
+      .filter((t) => t.paid_by && t.amount && t.participants)
+      .map((t) => ({ paid_by: t.paid_by, amount: t.amount!, date: t.date, participants: t.participants! })),
     incomeMap
   )
 
