@@ -15,11 +15,34 @@ const VALID_PEOPLE: Record<string, string> = {
 }
 
 async function sendMessage(chatId: number, text: string) {
-  await fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: "Markdown" }),
-  })
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: "Markdown" }),
+    })
+    if (!res.ok) {
+      const body = await res.text()
+      console.error(`[Telegram] sendMessage falhou: ${res.status} ${body}`)
+      // Tenta reenviar sem Markdown (pode ter sido erro de parsing)
+      await fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chatId, text }),
+      })
+    }
+  } catch (err) {
+    console.error(`[Telegram] sendMessage erro:`, err)
+    try {
+      await fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chatId, text: "❌ Erro interno ao enviar resposta. Tente novamente." }),
+      })
+    } catch {
+      // Segunda tentativa também falhou — nada mais a fazer
+    }
+  }
 }
 
 function resolvePerson(name: string): string | null {
@@ -39,22 +62,26 @@ export async function POST(req: NextRequest) {
   const text: string = message.text.trim()
 
   if (text.startsWith("/add")) {
-    // /add <descrição> <valor> <quem pagou> [participantes...]
-    const parts = text.slice(4).trim().split(/\s+/)
+    // /add <descrição com espaços> <valor> <quem pagou> [participantes...]
+    const tokens = text.slice(4).trim().split(/\s+/)
 
-    if (parts.length < 3) {
+    // O valor é o primeiro token numérico; tudo antes é a descrição
+    const amountIndex = tokens.findIndex((t) => !isNaN(parseFloat(t.replace(",", "."))))
+
+    if (amountIndex < 1 || amountIndex >= tokens.length - 1) {
       await sendMessage(
         chatId,
         "Uso: `/add <descrição> <valor> <quem pagou> [participantes...]`\n" +
-          "Ex: `/add Mercado 150 Antonio Julia Pietro`"
+          "Ex: `/add Mercado Pão de Açúcar 150 Antonio Julia Pietro`"
       )
       return NextResponse.json({ ok: true })
     }
 
-    const description = parts[0]
-    const amount = parseFloat(parts[1].replace(",", "."))
-    const paidByRaw = parts[2]
-    const participantRaws = parts.length > 3 ? parts.slice(2) : [paidByRaw]
+    const description = tokens.slice(0, amountIndex).join(" ")
+    const amount = parseFloat(tokens[amountIndex].replace(",", "."))
+    const remaining = tokens.slice(amountIndex + 1)
+    const paidByRaw = remaining[0]
+    const participantRaws = remaining.length > 1 ? remaining : [paidByRaw]
 
     if (isNaN(amount)) {
       await sendMessage(chatId, "Valor inválido. Use número como `150` ou `150.50`")
@@ -130,7 +157,7 @@ export async function POST(req: NextRequest) {
       chatId,
       "*Comandos disponíveis:*\n" +
         "`/add <descrição> <valor> <quem pagou> [participantes...]` — adiciona gasto\n" +
-        "Ex: `/add Mercado 150 Antonio Julia Pietro`\n\n" +
+        "Ex: `/add Mercado Pão de Açúcar 150 Antonio Julia Pietro`\n\n" +
         "`/saldo` — mostra quem deve quanto pra quem"
     )
   }
