@@ -13,3 +13,4 @@ pnpm-debug.log*
 .env*.local
 .vercel
 tsconfig.tsbuildinfo
+.claude/settings.local.json
