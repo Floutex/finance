@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx next:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(curl \"https://api.telegram.org/bot8569128692:AAF9k3KvFMya7VusUebte947JGWKcR2ICE4/setWebhook?url=https://couple-finance-theta.vercel.app/api/telegram\")",
+      "Bash(curl -X POST \"https://api.telegram.org/bot8569128692:AAF9k3KvFMya7VusUebte947JGWKcR2ICE4/setMyCommands\" -H \"Content-Type: application/json\" -d '{\"\"commands\"\":[{\"\"command\"\":\"\"add\"\",\"\"description\"\":\"\"Adicionar gasto — /add Descrição Valor QuemPagou Participantes\"\"},{\"\"command\"\":\"\"saldo\"\",\"\"description\"\":\"\"Ver quem deve quanto pra quem\"\"},{\"\"command\"\":\"\"help\"\",\"\"description\"\":\"\"Ver lista de comandos\"\"}]}')",
+      "Bash(curl -X POST \"https://api.telegram.org/bot8569128692:AAF9k3KvFMya7VusUebte947JGWKcR2ICE4/setMyCommands\" -H \"Content-Type: application/json; charset=utf-8\" --data-raw '{\"\"commands\"\":[{\"\"command\"\":\"\"add\"\",\"\"description\"\":\"\"Adicionar gasto: /add Descricao Valor Pagador Participantes\"\"},{\"\"command\"\":\"\"saldo\"\",\"\"description\"\":\"\"Ver quem deve quanto pra quem\"\"},{\"\"command\"\":\"\"help\"\",\"\"description\"\":\"\"Ver lista de comandos\"\"}]}')",
+      "Bash(curl \"https://api.telegram.org/bot8569128692:AAF9k3KvFMya7VusUebte947JGWKcR2ICE4/getMe\")",
+      "Bash(find /c/Users/anton/Downloads/finance/src -type f \\\\\\(-name *.ts -o -name *.js -o -name *.tsx -o -name *.jsx \\\\\\))",
+      "Bash(xargs ls:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run:*)",
+      "Bash(wc -l C:/Users/anton/Downloads/finance/components/spreadsheet-dashboard.tsx C:/Users/anton/Downloads/finance/components/dashboard/*.tsx C:/Users/anton/Downloads/finance/components/dashboard/*.ts C:/Users/anton/Downloads/finance/lib/constants.ts)"
+    ]
+  }
+}

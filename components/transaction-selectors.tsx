@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { CustomSelect } from "@/components/ui/custom-select"
 import { getCategories, getSupabaseClient } from "@/lib/supabase"
+import { PARTICIPANTS } from "@/lib/constants"
 import { Loader2 } from "lucide-react"
 
 interface CategorySelectorProps {
@@ -106,8 +107,6 @@ interface PayerSelectorProps {
     disabled?: boolean
     className?: string
 }
-
-const PARTICIPANTS = ["Antônio", "Júlia", "Simões", "Pietro"]
 
 export function PayerSelector({ value, onChange, currentUser, disabled, className }: PayerSelectorProps) {
     const isAntonio = currentUser === "Antônio"

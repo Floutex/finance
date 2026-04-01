@@ -4,13 +4,7 @@ import { useState, useCallback, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Lock } from "lucide-react"
-
-const USERS = [
-    { name: "Antônio", pin: "2202", color: "#1E40AF" }, // Blue
-    { name: "Júlia", pin: "3003", color: "#6B21A8" }, // Purple
-    { name: "Simões", pin: "3101", color: "#EA580C" }, // Orange
-    { name: "Pietro", pin: "1234", color: "#059669" }, // Green
-]
+import { USERS } from "@/lib/constants"
 
 function getGreeting(): string {
     const hour = new Date().getHours()
@@ -64,7 +58,7 @@ export function AccessControl({ onLogin }: AccessControlProps) {
         if (value.length === 4) {
             const user = USERS.find((u) => u.pin === value)
             if (user) {
-                startWelcomeAnimation(user.name, user.color)
+                startWelcomeAnimation(user.name, user.hex)
             } else {
                 setError("PIN incorreto")
                 setTimeout(() => {
@@ -91,10 +85,10 @@ export function AccessControl({ onLogin }: AccessControlProps) {
                 className="absolute inset-0"
                 style={{
                     background: `
-                        radial-gradient(circle at 0% 0%, #6B21A8 0%, transparent 50%),
-                        radial-gradient(circle at 100% 0%, #1E40AF 0%, transparent 50%),
-                        radial-gradient(circle at 100% 100%, #EA580C 0%, transparent 50%),
-                        radial-gradient(circle at 0% 100%, #059669 0%, transparent 50%)
+                        radial-gradient(circle at 0% 0%, ${USERS[1].hex} 0%, transparent 50%),
+                        radial-gradient(circle at 100% 0%, ${USERS[0].hex} 0%, transparent 50%),
+                        radial-gradient(circle at 100% 100%, ${USERS[2].hex} 0%, transparent 50%),
+                        radial-gradient(circle at 0% 100%, ${USERS[3].hex} 0%, transparent 50%)
                     `,
                     opacity: showGreeting ? 0 : 0.3,
                     transition: "opacity 1s ease-in-out",
