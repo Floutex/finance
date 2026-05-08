@@ -5,6 +5,7 @@ export interface Transaction {
     amount: number
     participants: string[]
     date: string
+    custom_shares?: Record<string, number> | null
 }
 
 export interface Debt {
@@ -36,7 +37,8 @@ export function simplifyDebts(
         const monthIncomes = incomeMap?.get(yearMonth)
         const shares = calculateShares(
             { amount: t.amount, participants: t.participants },
-            monthIncomes
+            monthIncomes,
+            t.custom_shares ?? undefined
         )
 
         // Each participant (except payer) owes their share to the payer

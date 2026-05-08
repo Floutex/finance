@@ -59,9 +59,9 @@ export function RequestDialog({
         onClick={onClose}
         aria-hidden="true"
       />
-      <div className="relative flex h-full items-center justify-center p-4" onKeyDown={handleKeyDown}>
+      <div className="relative flex h-full items-end md:items-center justify-center p-0 md:p-4" onKeyDown={handleKeyDown}>
         <div
-          className="w-full max-w-xl rounded-lg border border-border bg-card p-6 shadow-lg outline-none"
+          className="w-full md:max-w-xl max-h-[95vh] overflow-y-auto rounded-t-2xl md:rounded-lg border border-border bg-card p-6 shadow-lg outline-none"
           role="dialog"
           aria-modal="true"
           aria-labelledby="request-dialog-title"

@@ -2,13 +2,19 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTransactions } from "@/hooks/use-transactions"
+import { useParticipants } from "@/hooks/use-participants"
 import { format, isSameMonth, parseISO, subMonths, subYears } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { getSupabaseClient, bulkDeleteByIds, bulkUpdateByIds, getMonthlyIncomes } from "@/lib/supabase"
 import type { Tables } from "@/lib/database.types"
-import { PARTICIPANTS, normalizeNumber, normalizeText, capitalize, PENDING_MARKER, formatCurrency } from "@/lib/constants"
+import { ADMIN_USER, normalizeNumber, normalizeText, capitalize, PENDING_MARKER, formatCurrency } from "@/lib/constants"
 import { simplifyDebts } from "@/lib/debt-simplification"
 import { buildIncomeMap, calculateShares } from "@/lib/proportional-split"
+import { uploadReceipt } from "@/lib/storage"
+import { AuditLogDialog } from "@/components/admin/audit-log-dialog"
+import { CategoriesDialog } from "@/components/admin/categories-dialog"
+import { InviteDialog } from "@/components/admin/invite-dialog"
+import { Settings } from "lucide-react"
 
 import {
   StatsCards,
@@ -44,7 +50,7 @@ const toISODate = (value: string) => {
   }
 }
 
-const initialFormState = (defaultPayer: string = ""): FormState => {
+const initialFormState = (defaultPayer: string = "", defaultParticipants: string[] = []): FormState => {
   const today = new Date().toISOString().slice(0, 10)
   return {
     description: "",
@@ -52,13 +58,18 @@ const initialFormState = (defaultPayer: string = ""): FormState => {
     paid_by: defaultPayer,
     date: today,
     amount: "",
-    participants: PARTICIPANTS,
+    participants: defaultParticipants,
+    customShares: null,
   }
 }
 
 export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) => {
   const supabase = getSupabaseClient()
   const { transactions, loading, error: fetchError, updateCache, reload } = useTransactions()
+  const { active: activeParticipants, members } = useParticipants()
+  const memberNames = useMemo(() => members.map(m => m.name), [members])
+  const defaultParticipantNames = useMemo(() => activeParticipants.map(p => p.name), [activeParticipants])
+  const isAdmin = currentUser === ADMIN_USER
 
   // ── Error state ──
   const [localError, setLocalError] = useState<string | null>(null)
@@ -75,9 +86,18 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
   const [currentPage, setCurrentPage] = useState(1)
 
   // ── Create dialog ──
-  const [createForm, setCreateForm] = useState<FormState>(() => initialFormState(currentUser))
+  const [createForm, setCreateForm] = useState<FormState>(() => initialFormState(currentUser, []))
   const [createPending, setCreatePending] = useState(false)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
+
+  // ── Receipt attached to "Create" form ──
+  const [createReceiptFile, setCreateReceiptFile] = useState<File | null>(null)
+
+  // ── Admin dialogs ──
+  const [adminMenuOpen, setAdminMenuOpen] = useState(false)
+  const [auditDialogOpen, setAuditDialogOpen] = useState(false)
+  const [categoriesDialogOpen, setCategoriesDialogOpen] = useState(false)
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false)
 
   // ── Upload dialog ──
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
@@ -189,7 +209,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
   const createAmountInvalid = createForm.amount.trim().length > 0 && createAmountValue === null
   const isCreateFormValid = useMemo(() => {
     return createForm.description.trim().length > 0
-      && PARTICIPANTS.includes(createForm.paid_by)
+      && createForm.paid_by.length > 0
       && createForm.date.length > 0
       && normalizeNumber(createForm.amount) !== null
       && createForm.participants.length > 0
@@ -289,19 +309,20 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
     let runningBalance = 0
     const dateBalanceMap = new Map<string, number>()
     for (const t of sorted) {
-      const participants = t.participants ?? ["Antônio", "Júlia"]
+      const participants = t.participants ?? memberNames
       const amount = t.amount ?? 0
       if (participants.length === 0) continue
       const yearMonth = t.date.slice(0, 7)
       const monthIncomes = incomeMap.get(yearMonth)
-      const shares = calculateShares({ amount, participants }, monthIncomes)
+      const customShares = t.custom_shares as Record<string, number> | null | undefined
+      const shares = calculateShares({ amount, participants }, monthIncomes, customShares ?? undefined)
       const myShare = shares.get(currentUser) ?? (amount / participants.length)
       const userIsParticipant = participants.includes(currentUser)
       const userIsPayer = t.paid_by === currentUser
       if (userIsPayer && userIsParticipant) runningBalance += amount - myShare
       else if (userIsPayer && !userIsParticipant) runningBalance += amount
       else if (!userIsPayer && userIsParticipant) runningBalance -= myShare
-      dateBalanceMap.set(t.date, runningBalance)
+      if (userIsPayer || userIsParticipant) dateBalanceMap.set(t.date, runningBalance)
     }
     return Array.from(dateBalanceMap.entries()).map(([date, balance]) => ({ date, balance: Number(balance.toFixed(2)) }))
   }, [transactions, currentUser, incomeMap])
@@ -310,7 +331,8 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
   const simplifiedDebts = useMemo(() => {
     const allTransactions = transactions.map(t => ({
       paid_by: t.paid_by, amount: t.amount ?? 0,
-      participants: t.participants ?? ["Antônio", "Júlia"], date: t.date,
+      participants: t.participants ?? memberNames, date: t.date,
+      custom_shares: (t.custom_shares as Record<string, number> | null) ?? null,
     }))
     return simplifyDebts(allTransactions, incomeMap)
   }, [transactions, incomeMap])
@@ -334,8 +356,8 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
   const handleToggleAll = () => setSelectedRows(prev => prev.length === sortedTransactions.length ? [] : sortedTransactions.map(t => t.id))
 
   // ── Create ──
-  const handleOpenCreateDialog = () => { setCreateForm(initialFormState(currentUser)); setError(null); setCreateDialogOpen(true) }
-  const handleCloseCreateDialog = () => { if (createPending) return; setCreateDialogOpen(false); setError(null); setCreateForm(initialFormState(currentUser)) }
+  const handleOpenCreateDialog = () => { setCreateForm(initialFormState(currentUser, defaultParticipantNames)); setError(null); setCreateDialogOpen(true) }
+  const handleCloseCreateDialog = () => { if (createPending) return; setCreateDialogOpen(false); setError(null); setCreateForm(initialFormState(currentUser, defaultParticipantNames)) }
 
   const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -348,10 +370,32 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
       description: createForm.description.trim(), category: createForm.category.trim() || null,
       paid_by: createForm.paid_by.trim(), date: createForm.date,
       amount: createAmountValue, participants: createForm.participants,
+      custom_shares: createForm.customShares ?? null,
+      last_edited_by: currentUser, last_edited_at: new Date().toISOString(),
     }
     const { data, error: insertError } = await supabase.from("shared_transactions").insert(payload).select("*").single()
-    if (insertError) setError(insertError.message)
-    else if (data) { updateCache(prev => [data, ...prev]); setCreateForm(initialFormState(currentUser)); setCreateDialogOpen(false) }
+    if (insertError) { setError(insertError.message); setCreatePending(false); return }
+    if (data) {
+      let finalRow = data
+      if (createReceiptFile) {
+        try {
+          const url = await uploadReceipt(createReceiptFile, data.id)
+          const { data: updated } = await supabase
+            .from("shared_transactions")
+            .update({ receipt_url: url, last_edited_by: currentUser, last_edited_at: new Date().toISOString() })
+            .eq("id", data.id)
+            .select("*")
+            .single()
+          if (updated) finalRow = updated
+        } catch (uploadErr) {
+          console.error("Falha ao subir comprovante:", uploadErr)
+        }
+      }
+      updateCache(prev => [finalRow, ...prev])
+      setCreateForm(initialFormState(currentUser, defaultParticipantNames))
+      setCreateReceiptFile(null)
+      setCreateDialogOpen(false)
+    }
     setCreatePending(false)
   }
 
@@ -367,7 +411,8 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
       description: transaction.description, category: normalizeText(transaction.category),
       paid_by: transaction.paid_by, date: toISODate(transaction.date),
       amount: transaction.amount !== null ? String(transaction.amount) : "",
-      participants: transaction.participants ?? PARTICIPANTS,
+      participants: transaction.participants ?? defaultParticipantNames,
+      customShares: (transaction.custom_shares as Record<string, number> | null) ?? null,
     })
   }
 
@@ -384,6 +429,8 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
       description: editForm.description.trim(), category: editForm.category.trim() || null,
       paid_by: editForm.paid_by.trim(), date: editForm.date,
       amount: amountValue, participants: editForm.participants,
+      custom_shares: editForm.customShares ?? null,
+      last_edited_by: currentUser, last_edited_at: new Date().toISOString(),
     }
     const { data, error: updateError } = await supabase.from("shared_transactions").update(updatePayload).eq("id", transactionId).select("*").single()
     if (updateError) setError(updateError.message)
@@ -402,7 +449,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
     if (!transaction) return
     if (currentUser !== "Antônio" && transaction.paid_by !== currentUser) { setError("Você só pode deletar transações que você pagou."); return }
     setDeletePendingId(transactionId); setError(null)
-    const { error: deleteError } = await supabase.from("shared_transactions").update({ is_hidden: true }).eq("id", transactionId)
+    const { error: deleteError } = await supabase.from("shared_transactions").update({ is_hidden: true, last_edited_by: currentUser, last_edited_at: new Date().toISOString() }).eq("id", transactionId)
     if (deleteError) { setError(deleteError.message); setDeletePendingId(null); return }
     updateCache(prev => prev.filter(i => i.id !== transactionId))
     setSelectedRows(prev => prev.filter(i => i !== transactionId))
@@ -436,7 +483,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
       const data = await response.json()
       setExtractedTransactions(data.transactions.map((t: any) => ({
         description: t.description, date: t.date, amount: t.amount,
-        participants: PARTICIPANTS, paid_by: "", category: "",
+        participants: memberNames, paid_by: "", category: "",
       })))
     } catch (err) { setError(err instanceof Error ? err.message : "Erro ao analisar imagem") }
     finally { setAnalyzing(false) }
@@ -447,19 +494,39 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
   }
 
   const handleSaveExtractedTransactions = async () => {
-    const invalid = extractedTransactions.filter(t => !t.description.trim() || !PARTICIPANTS.includes(t.paid_by) || !t.date)
+    const invalid = extractedTransactions.filter(t => !t.description.trim() || !defaultParticipantNames.includes(t.paid_by) || !t.date)
     if (invalid.length > 0) { setError("Preencha todos os campos obrigatórios (descrição, data e pago por) em todas as transações"); return }
     const uninvolved = extractedTransactions.filter(t => t.paid_by !== currentUser && !t.participants.includes(currentUser))
     if (uninvolved.length > 0) { setError("Você não pode salvar transações nas quais não está envolvido (pagando ou participando)."); return }
     setSavePending(true); setError(null)
     try {
+      const nowIso = new Date().toISOString()
       const payloads: TransactionInsert[] = extractedTransactions.map(t => ({
         description: t.description.trim(), category: t.category.trim() || null,
         paid_by: t.paid_by.trim(), date: t.date, amount: t.amount, participants: t.participants,
+        last_edited_by: currentUser, last_edited_at: nowIso,
       }))
       const { data, error: insertError } = await supabase.from("shared_transactions").insert(payloads).select("*")
       if (insertError) setError(insertError.message)
-      else if (data) { updateCache(prev => [...data, ...prev]); handleCloseUploadDialog() }
+      else if (data) {
+        let finalData = data
+        if (uploadedFile && data.length > 0) {
+          try {
+            const url = await uploadReceipt(uploadedFile, data[0].id)
+            const ids = data.map(r => r.id)
+            const { data: updated } = await supabase
+              .from("shared_transactions")
+              .update({ receipt_url: url, last_edited_by: currentUser, last_edited_at: new Date().toISOString() })
+              .in("id", ids)
+              .select("*")
+            if (updated) finalData = updated
+          } catch (e) {
+            console.error("Falha ao salvar imagem como recibo:", e)
+          }
+        }
+        updateCache(prev => [...finalData, ...prev])
+        handleCloseUploadDialog()
+      }
     } catch (err) { setError(err instanceof Error ? err.message : "Erro ao salvar transações") }
     finally { setSavePending(false) }
   }
@@ -476,6 +543,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
     const payload: TransactionInsert = {
       description, category: "Solicitação", paid_by: PENDING_MARKER,
       date: requestForm.date, amount: amountVal, participants: [currentUser],
+      last_edited_by: currentUser, last_edited_at: new Date().toISOString(),
     }
     const { data, error: insertError } = await supabase.from("shared_transactions").insert(payload).select("*").single()
     if (insertError) { setError(insertError.message); setRequestPending(false); return }
@@ -487,7 +555,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
       amount: amountVal, date: requestForm.date, transaction_id: data?.id ?? null,
       timestamp: new Date().toISOString(),
     }
-    PARTICIPANTS.filter(p => p !== currentUser).forEach(target => {
+    memberNames.filter(p => p !== currentUser).forEach(target => {
       const url = WEBHOOK_URLS[target]
       if (url) fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(webhookPayload) }).catch(() => {})
     })
@@ -497,7 +565,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
 
   const handleMarkAsPaid = async (transactionId: string) => {
     setMarkingPaidId(transactionId); setError(null)
-    const { data, error: updateError } = await supabase.from("shared_transactions").update({ paid_by: currentUser } as TransactionUpdate).eq("id", transactionId).select("*").single()
+    const { data, error: updateError } = await supabase.from("shared_transactions").update({ paid_by: currentUser, last_edited_by: currentUser, last_edited_at: new Date().toISOString() } as TransactionUpdate).eq("id", transactionId).select("*").single()
     if (updateError) { setError(updateError.message); setMarkingPaidId(null); return }
     if (data) {
       updateCache(prev => prev.map(i => i.id === transactionId ? data : i))
@@ -506,7 +574,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
         paid_by: currentUser, description: data.description, pix: "", amount: data.amount,
         date: data.date, transaction_id: transactionId, timestamp: new Date().toISOString(),
       }
-      PARTICIPANTS.forEach(target => {
+      memberNames.forEach(target => {
         const url = WEBHOOK_URLS[target]
         if (url) fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(webhookPayload) }).catch(() => {})
       })
@@ -521,7 +589,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
     const unauthorized = toDelete.filter(t => currentUser !== "Antônio" && t.paid_by !== currentUser)
     if (unauthorized.length > 0) { setBulkError(`Você não pode deletar ${unauthorized.length} transações selecionadas pois não foi você quem pagou.`); return }
     setBulkPending(true); setBulkError(null)
-    const { error } = await bulkDeleteByIds("shared_transactions", selectedRows)
+    const { error } = await bulkDeleteByIds("shared_transactions", selectedRows, currentUser)
     if (error) { setBulkError(error.message); setBulkPending(false); return }
     await reload(); setSelectedRows([]); setBulkPending(false); setBulkDeleteOpen(false)
   }
@@ -532,7 +600,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
     if (quickField === "category") values.category = quickValue.trim() || null
     else if (quickField === "paid_by") values.paid_by = quickValue.trim()
     setBulkPending(true); setBulkError(null)
-    const { error } = await bulkUpdateByIds("shared_transactions", selectedRows, values)
+    const { error } = await bulkUpdateByIds("shared_transactions", selectedRows, values, currentUser)
     if (error) { setBulkError(error.message); setBulkPending(false); return }
     await reload(); setSelectedRows([]); setBulkPending(false); setBulkQuickEditOpen(false); setQuickValue("")
   }
@@ -545,7 +613,7 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
     if (advancedDate.trim()) values.date = advancedDate.trim()
     if (Object.keys(values).length === 0) return
     setBulkPending(true); setBulkError(null)
-    const { error } = await bulkUpdateByIds("shared_transactions", selectedRows, values)
+    const { error } = await bulkUpdateByIds("shared_transactions", selectedRows, values, currentUser)
     if (error) { setBulkError(error.message); setBulkPending(false); return }
     await reload(); setSelectedRows([]); setBulkPending(false); setBulkAdvancedEditOpen(false)
     setAdvancedCategory(""); setAdvancedPaidBy(""); setAdvancedDate("")
@@ -616,11 +684,21 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
         formValid={isCreateFormValid}
         error={createDialogOpen ? error : null}
         currentUser={currentUser}
+        receiptFile={createReceiptFile}
+        onReceiptFileChange={setCreateReceiptFile}
         onClose={handleCloseCreateDialog}
         onSubmit={handleCreate}
         onInputChange={handleCreateInputChange}
         onFormChange={(updates) => setCreateForm(prev => ({ ...prev, ...updates }))}
       />
+
+      {isAdmin && (
+        <>
+          <AuditLogDialog open={auditDialogOpen} onClose={() => setAuditDialogOpen(false)} />
+          <CategoriesDialog open={categoriesDialogOpen} actor={currentUser} onClose={() => setCategoriesDialogOpen(false)} />
+          <InviteDialog open={inviteDialogOpen} onClose={() => setInviteDialogOpen(false)} />
+        </>
+      )}
 
       <UploadDialog
         open={uploadDialogOpen}
@@ -691,6 +769,10 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
           onOpenBulkQuickEdit={() => setBulkQuickEditOpen(true)}
           onOpenBulkDelete={() => setBulkDeleteOpen(true)}
           onClearSelection={() => setSelectedRows([])}
+          isAdmin={isAdmin}
+          onOpenAuditLog={() => setAuditDialogOpen(true)}
+          onOpenCategories={() => setCategoriesDialogOpen(true)}
+          onOpenInvite={() => setInviteDialogOpen(true)}
         />
 
         <TransactionTable

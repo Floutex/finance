@@ -3,7 +3,7 @@ import { getSupabaseClient } from "@/lib/supabase"
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const { description, date, amount, paid_by, participants, category } = body
+  const { description, date, amount, paid_by, participants, category, last_edited_by } = body
 
   if (!description || !date || !amount || !paid_by) {
     return NextResponse.json(
@@ -22,6 +22,8 @@ export async function POST(req: NextRequest) {
       paid_by,
       participants: participants ?? null,
       category: category ?? null,
+      last_edited_by: last_edited_by ?? paid_by,
+      last_edited_at: new Date().toISOString(),
     })
     .select("*")
     .single()

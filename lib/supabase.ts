@@ -23,18 +23,33 @@ export const getSupabaseClient = () => {
   return browserClient
 }
 
-export const bulkDeleteByIds = async (table: keyof Database["public"]["Tables"], ids: string[]) => {
+export const bulkDeleteByIds = async (
+  table: keyof Database["public"]["Tables"],
+  ids: string[],
+  actor?: string
+) => {
   const client = getSupabaseClient()
-  return await client.from(table as "shared_transactions").update({ is_hidden: true } as any).in("id", ids)
+  const payload: Record<string, unknown> = {
+    is_hidden: true,
+    last_edited_at: new Date().toISOString(),
+  }
+  if (actor) payload.last_edited_by = actor
+  return await client.from(table as "shared_transactions").update(payload as any).in("id", ids)
 }
 
 export const bulkUpdateByIds = async <T extends keyof Database["public"]["Tables"]>(
   table: T,
   ids: string[],
-  values: Partial<Database["public"]["Tables"][T]["Update"]>
+  values: Partial<Database["public"]["Tables"][T]["Update"]>,
+  actor?: string
 ) => {
   const client = getSupabaseClient()
-  return await client.from(table as "shared_transactions").update(values as any).in("id", ids).select("*")
+  const payload = { ...values } as Record<string, unknown>
+  if (actor) {
+    payload.last_edited_by = actor
+    payload.last_edited_at = new Date().toISOString()
+  }
+  return await client.from(table as "shared_transactions").update(payload as any).in("id", ids).select("*")
 }
 
 export const getCategories = async () => {

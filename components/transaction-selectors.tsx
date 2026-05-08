@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react"
 import { CustomSelect } from "@/components/ui/custom-select"
 import { getCategories, getSupabaseClient } from "@/lib/supabase"
-import { PARTICIPANTS } from "@/lib/constants"
+import { ADMIN_USER } from "@/lib/constants"
+import { useParticipants } from "@/hooks/use-participants"
 import { Loader2 } from "lucide-react"
 
 interface CategorySelectorProps {
@@ -16,6 +17,18 @@ interface CategorySelectorProps {
 // Module-level cache for categories
 let cachedCategories: string[] | null = null
 let categoriesFetchPromise: Promise<string[]> | null = null
+const categoriesSubscribers = new Set<() => void>()
+
+export function invalidateCategoriesCache() {
+    cachedCategories = null
+    categoriesFetchPromise = null
+    categoriesSubscribers.forEach(cb => cb())
+}
+
+export function subscribeCategories(cb: () => void): () => void {
+    categoriesSubscribers.add(cb)
+    return () => { categoriesSubscribers.delete(cb) }
+}
 
 async function loadCategoriesShared(): Promise<string[]> {
     if (cachedCategories) return cachedCategories
@@ -60,20 +73,26 @@ export function CategorySelector({ value, onChange, disabled, className }: Categ
     const [loading, setLoading] = useState(cachedCategories === null)
 
     useEffect(() => {
-        if (cachedCategories) {
-            setCategories(cachedCategories)
-            setLoading(false)
-            return
-        }
-
         let cancelled = false
-        loadCategoriesShared().then(result => {
-            if (!cancelled) {
-                setCategories(result)
-                setLoading(false)
+        const sync = () => {
+            if (cachedCategories) {
+                if (!cancelled) {
+                    setCategories(cachedCategories)
+                    setLoading(false)
+                }
+                return
             }
-        })
-        return () => { cancelled = true }
+            setLoading(true)
+            loadCategoriesShared().then(result => {
+                if (!cancelled) {
+                    setCategories(result)
+                    setLoading(false)
+                }
+            })
+        }
+        sync()
+        const unsubscribe = subscribeCategories(sync)
+        return () => { cancelled = true; unsubscribe() }
     }, [])
 
     if (loading) {
@@ -109,10 +128,14 @@ interface PayerSelectorProps {
 }
 
 export function PayerSelector({ value, onChange, currentUser, disabled, className }: PayerSelectorProps) {
-    const isAntonio = currentUser === "Antônio"
-    const isDisabled = disabled || !isAntonio
+    const { active } = useParticipants()
+    const isAdmin = currentUser === ADMIN_USER
+    const isDisabled = disabled || !isAdmin
 
-    const options = PARTICIPANTS.map(p => ({ value: p, label: p }))
+    // Stable list: members first, then guests; keeps current value selectable even if archived
+    const candidates = active.map(p => p.name)
+    const names = value && !candidates.includes(value) ? [value, ...candidates] : candidates
+    const options = names.map(p => ({ value: p, label: p }))
 
     return (
         <CustomSelect

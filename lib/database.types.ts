@@ -32,60 +32,95 @@ export type Database = {
         }
         Relationships: []
       }
-      profiles: {
+      monthly_incomes: {
         Row: {
-          avatar_url: string | null
-          full_name: string | null
+          amount: number
+          created_at: string | null
           id: string
+          is_fixed: boolean | null
+          person: string
           updated_at: string | null
-          username: string | null
-          website: string | null
+          year_month: string
         }
         Insert: {
-          avatar_url?: string | null
-          full_name?: string | null
-          id: string
+          amount: number
+          created_at?: string | null
+          id?: string
+          is_fixed?: boolean | null
+          person: string
           updated_at?: string | null
-          username?: string | null
-          website?: string | null
+          year_month: string
         }
         Update: {
-          avatar_url?: string | null
-          full_name?: string | null
+          amount?: number
+          created_at?: string | null
           id?: string
+          is_fixed?: boolean | null
+          person?: string
           updated_at?: string | null
-          username?: string | null
-          website?: string | null
+          year_month?: string
         }
         Relationships: []
       }
-      monthly_incomes: {
+      participant_tokens: {
         Row: {
-          id: string
-          person: string
-          year_month: string
-          amount: number
-          is_fixed: boolean
           created_at: string
-          updated_at: string
+          kind: string
+          label: string | null
+          participant_id: string | null
+          revoked_at: string | null
+          token: string
         }
         Insert: {
-          id?: string
-          person: string
-          year_month: string
-          amount: number
-          is_fixed?: boolean
           created_at?: string
-          updated_at?: string
+          kind: string
+          label?: string | null
+          participant_id?: string | null
+          revoked_at?: string | null
+          token: string
         }
         Update: {
-          id?: string
-          person?: string
-          year_month?: string
-          amount?: number
-          is_fixed?: boolean
           created_at?: string
-          updated_at?: string
+          kind?: string
+          label?: string | null
+          participant_id?: string | null
+          revoked_at?: string | null
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "participant_tokens_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      participants: {
+        Row: {
+          color: string
+          created_at: string
+          id: string
+          is_archived: boolean
+          kind: string
+          name: string
+        }
+        Insert: {
+          color: string
+          created_at?: string
+          id?: string
+          is_archived?: boolean
+          kind: string
+          name: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          id?: string
+          is_archived?: boolean
+          kind?: string
+          name?: string
         }
         Relationships: []
       }
@@ -95,36 +130,78 @@ export type Database = {
           amount_owed: number | null
           category: string | null
           created_at: string
+          custom_shares: Json | null
           date: string
           description: string
           id: string
+          is_hidden: boolean | null
+          last_edited_at: string | null
+          last_edited_by: string | null
           paid_by: string
           participants: string[] | null
-          is_hidden: boolean
+          receipt_url: string | null
         }
         Insert: {
           amount?: number | null
           amount_owed?: number | null
           category?: string | null
           created_at?: string
+          custom_shares?: Json | null
           date: string
           description: string
           id?: string
+          is_hidden?: boolean | null
+          last_edited_at?: string | null
+          last_edited_by?: string | null
           paid_by: string
           participants?: string[] | null
-          is_hidden?: boolean
+          receipt_url?: string | null
         }
         Update: {
           amount?: number | null
           amount_owed?: number | null
           category?: string | null
           created_at?: string
+          custom_shares?: Json | null
           date?: string
           description?: string
           id?: string
+          is_hidden?: boolean | null
+          last_edited_at?: string | null
+          last_edited_by?: string | null
           paid_by?: string
           participants?: string[] | null
-          is_hidden?: boolean
+          receipt_url?: string | null
+        }
+        Relationships: []
+      }
+      transaction_audit: {
+        Row: {
+          action: string
+          actor: string | null
+          after: Json | null
+          before: Json | null
+          created_at: string
+          id: number
+          transaction_id: string
+        }
+        Insert: {
+          action: string
+          actor?: string | null
+          after?: Json | null
+          before?: Json | null
+          created_at?: string
+          id?: number
+          transaction_id: string
+        }
+        Update: {
+          action?: string
+          actor?: string | null
+          after?: Json | null
+          before?: Json | null
+          created_at?: string
+          id?: number
+          transaction_id?: string
         }
         Relationships: []
       }

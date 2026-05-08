@@ -1,11 +1,13 @@
 "use client"
 
 import { format, parseISO } from "date-fns"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { CategorySelector, PayerSelector } from "@/components/transaction-selectors"
 import { cn } from "@/components/ui/utils"
-import { getUserColorClasses, PARTICIPANTS, normalizeText, formatCurrency } from "@/lib/constants"
+import { getParticipantStyle, getParticipantAvatarStyle, normalizeText, formatCurrency } from "@/lib/constants"
+import { useParticipants } from "@/hooks/use-participants"
 import {
   Check,
   ChevronDown,
@@ -14,6 +16,7 @@ import {
   ChevronUp,
   ChevronsUpDown,
   Loader2,
+  Paperclip,
   Pencil,
   Trash2,
   X,
@@ -81,9 +84,123 @@ export function TransactionTable({
   onDelete,
   onPageChange,
 }: TransactionTableProps) {
+  const { active: activeParticipants } = useParticipants()
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   return (
     <div className="overflow-hidden rounded-3xl border border-border/50 bg-black/30 backdrop-blur-xl shadow-2xl">
-      <div className="overflow-x-auto">
+      {/* Mobile: card list */}
+      <div className="md:hidden divide-y divide-white/5">
+        {loading ? (
+          <div className="px-4 py-12 text-center text-muted-foreground">
+            <Loader2 className="mx-auto h-6 w-6 animate-spin opacity-50 mb-2" />
+            Carregando transações...
+          </div>
+        ) : sortedTransactions.length === 0 ? (
+          <div className="px-4 py-12 text-center text-muted-foreground text-sm">
+            Nenhuma transação encontrada.
+          </div>
+        ) : (
+          paginatedTransactions.map(transaction => {
+            const isSelected = selectedRows.includes(transaction.id)
+            const isEditing = editRowId === transaction.id
+            if (isEditing) {
+              return (
+                <div key={transaction.id} className="px-4 py-3 bg-primary/5 space-y-3">
+                  <Input name="description" value={editForm.description} onChange={onEditInputChange} placeholder="Descrição" />
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input type="date" name="date" value={editForm.date} onChange={onEditInputChange} />
+                    <Input name="amount" inputMode="decimal" value={editForm.amount} onChange={onEditInputChange} placeholder="Valor" />
+                  </div>
+                  <CategorySelector value={editForm.category} onChange={(v) => onEditFormChange({ category: v })} />
+                  <PayerSelector value={editForm.paid_by} onChange={(v) => onEditFormChange({ paid_by: v })} currentUser={currentUser} />
+                  <div className="flex flex-wrap gap-1.5">
+                    {activeParticipants.map(p => {
+                      const checked = editForm.participants.includes(p.name)
+                      return (
+                        <label key={p.id} className="cursor-pointer px-2 py-1 rounded text-xs border" style={checked ? getParticipantStyle(p.name, activeParticipants) : { borderColor: "rgba(148,163,184,0.3)", color: "rgb(148,163,184)" }}>
+                          <input type="checkbox" className="sr-only" checked={checked} onChange={e => onEditFormChange({ participants: e.target.checked ? [...editForm.participants, p.name] : editForm.participants.filter(x => x !== p.name) })} />
+                          {p.name}
+                        </label>
+                      )
+                    })}
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button size="sm" variant="outline" onClick={onCancelEdit}>Cancelar</Button>
+                    <Button size="sm" onClick={() => onSaveEdit(transaction.id)} disabled={editPending}>
+                      {editPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                    </Button>
+                  </div>
+                </div>
+              )
+            }
+            return (
+              <div key={transaction.id} className={cn("px-4 py-3", isSelected && "bg-primary/5")}>
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => onToggleRow(transaction.id)}
+                    className="mt-1 h-4 w-4 rounded border-white/20 bg-black/40 checked:bg-primary checked:border-primary"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-medium truncate">{transaction.description}</p>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {transaction.receipt_url && (
+                          <button type="button" onClick={() => setPreviewUrl(transaction.receipt_url!)} className="text-muted-foreground" title="Ver comprovante">
+                            <Paperclip className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        <span className="text-sm font-semibold tabular-nums">{formatCurrency(transaction.amount || 0)}</span>
+                      </div>
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      <span className="tabular-nums">{format(parseISO(transaction.date), "dd/MM/yyyy")}</span>
+                      <span>·</span>
+                      <span>{normalizeText(transaction.category) || "Sem categoria"}</span>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border"
+                          style={getParticipantStyle(transaction.paid_by, activeParticipants)}
+                        >
+                          {transaction.paid_by}
+                        </span>
+                        <div className="flex -space-x-1">
+                          {transaction.participants?.map(p => (
+                            <div
+                              key={p}
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full ring-2 ring-background text-[9px] font-bold"
+                              style={getParticipantAvatarStyle(p, activeParticipants)}
+                              title={p}
+                            >
+                              {p.charAt(0)}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      {(currentUser === "Antônio" || transaction.paid_by === currentUser) && (
+                        <div className="flex gap-1">
+                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => onEdit(transaction)}>
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                          <Button size="icon" variant="ghost" className="h-7 w-7 text-red-400" onClick={() => onDelete(transaction.id)}>
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )
+          })
+        )}
+      </div>
+
+      {/* Desktop: table */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="min-w-full text-left text-sm">
           <thead className="bg-white/5 border-b border-white/5">
             <tr>
@@ -205,7 +322,10 @@ export function TransactionTable({
                           currentUser={currentUser}
                         />
                       ) : (
-                        <span className={cn("inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset", getUserColorClasses(transaction.paid_by))}>
+                        <span
+                          className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border"
+                          style={getParticipantStyle(transaction.paid_by, activeParticipants)}
+                        >
                           {transaction.paid_by}
                         </span>
                       )}
@@ -221,9 +341,21 @@ export function TransactionTable({
                           className="h-8 text-right w-24 ml-auto"
                         />
                       ) : (
-                        <span className={(transaction.amount || 0) > 1000 ? "text-foreground" : "text-muted-foreground"}>
-                          {formatCurrency(transaction.amount || 0)}
-                        </span>
+                        <div className="flex items-center justify-end gap-2">
+                          {transaction.receipt_url && (
+                            <button
+                              type="button"
+                              onClick={() => setPreviewUrl(transaction.receipt_url!)}
+                              className="text-muted-foreground hover:text-foreground transition-colors"
+                              title="Ver comprovante"
+                            >
+                              <Paperclip className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                          <span className={(transaction.amount || 0) > 1000 ? "text-foreground" : "text-muted-foreground"}>
+                            {formatCurrency(transaction.amount || 0)}
+                          </span>
+                        </div>
                       )}
                     </td>
 
@@ -231,26 +363,40 @@ export function TransactionTable({
                     <td className="px-6 py-4">
                       <div className="flex -space-x-1 overflow-hidden py-1">
                         {isEditing ? (
-                          <div className="flex gap-2">
-                            {PARTICIPANTS.map(p => (
-                              <label key={p} className={cn("cursor-pointer px-2 py-1 rounded text-xs border", editForm.participants.includes(p) ? getUserColorClasses(p) : "border-border text-muted-foreground")}>
-                                <input type="checkbox" className="sr-only" checked={editForm.participants.includes(p)}
-                                  onChange={e => {
-                                    const checked = e.target.checked
-                                    onEditFormChange({
-                                      participants: checked
-                                        ? [...editForm.participants, p]
-                                        : editForm.participants.filter(x => x !== p)
-                                    })
-                                  }}
-                                />
-                                {p.charAt(0)}
-                              </label>
-                            ))}
+                          <div className="flex flex-wrap gap-1.5">
+                            {activeParticipants.map(p => {
+                              const checked = editForm.participants.includes(p.name)
+                              return (
+                                <label
+                                  key={p.id}
+                                  className="cursor-pointer px-2 py-1 rounded text-xs border"
+                                  style={checked
+                                    ? getParticipantStyle(p.name, activeParticipants)
+                                    : { borderColor: "rgba(148,163,184,0.3)", color: "rgb(148,163,184)" }}
+                                >
+                                  <input type="checkbox" className="sr-only" checked={checked}
+                                    onChange={e => {
+                                      const c = e.target.checked
+                                      onEditFormChange({
+                                        participants: c
+                                          ? [...editForm.participants, p.name]
+                                          : editForm.participants.filter(x => x !== p.name)
+                                      })
+                                    }}
+                                  />
+                                  {p.name.charAt(0)}
+                                </label>
+                              )
+                            })}
                           </div>
                         ) : (
                           transaction.participants?.map(p => (
-                            <div key={p} className={cn("inline-flex h-6 w-6 items-center justify-center rounded-full ring-2 ring-background text-[10px] font-bold", getUserColorClasses(p).replace('bg-', 'bg-opacity-100 bg-'))}>
+                            <div
+                              key={p}
+                              className="inline-flex h-6 w-6 items-center justify-center rounded-full ring-2 ring-background text-[10px] font-bold"
+                              style={getParticipantAvatarStyle(p, activeParticipants)}
+                              title={p}
+                            >
                               {p.charAt(0)}
                             </div>
                           ))
@@ -260,7 +406,7 @@ export function TransactionTable({
 
                     {/* Actions */}
                     <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                      <div className="flex justify-end gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                         {isEditing ? (
                           <>
                             <Button size="icon" variant="ghost" className="h-8 w-8 text-green-500 hover:text-green-400 hover:bg-green-500/10" onClick={() => onSaveEdit(transaction.id)}>
@@ -293,6 +439,24 @@ export function TransactionTable({
           </tbody>
         </table>
       </div>
+
+      {previewUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4" onClick={() => setPreviewUrl(null)}>
+          <button
+            type="button"
+            onClick={() => setPreviewUrl(null)}
+            className="absolute top-4 right-4 rounded-full bg-white/10 p-2 hover:bg-white/20"
+            aria-label="Fechar"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          {/^https?:\/\/.+\.pdf(\?|$)/i.test(previewUrl) ? (
+            <iframe src={previewUrl} className="w-full h-full max-w-5xl bg-white rounded" title="Comprovante" />
+          ) : (
+            <img src={previewUrl} alt="Comprovante" className="max-h-full max-w-full rounded-lg shadow-2xl" onClick={e => e.stopPropagation()} />
+          )}
+        </div>
+      )}
 
       {/* Pagination */}
       {totalPages > 1 && (

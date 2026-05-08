@@ -23,8 +23,8 @@ export function BulkDeleteDialog({ open, count, pending, error, onClose, onConfi
   return (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
-      <div className="relative flex h-full items-center justify-center p-4">
-        <div className="w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-lg outline-none" role="dialog" aria-modal="true" aria-labelledby="bulk-delete-title">
+      <div className="relative flex h-full items-end md:items-center justify-center p-0 md:p-4">
+        <div className="w-full md:max-w-md max-h-[95vh] overflow-y-auto rounded-t-2xl md:rounded-lg border border-border bg-card p-6 shadow-lg outline-none" role="dialog" aria-modal="true" aria-labelledby="bulk-delete-title">
           <div className="flex items-center justify-between">
             <p id="bulk-delete-title" className="text-lg font-semibold">Excluir transações selecionadas</p>
             <Button type="button" variant="ghost" size="icon" onClick={onClose} disabled={pending} aria-label="Fechar" className="h-8 w-8">
@@ -70,8 +70,8 @@ export function BulkQuickEditDialog({
   return (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
-      <div className="relative flex h-full items-center justify-center p-4">
-        <div className="w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-lg outline-none" role="dialog" aria-modal="true" aria-labelledby="bulk-quick-title">
+      <div className="relative flex h-full items-end md:items-center justify-center p-0 md:p-4">
+        <div className="w-full md:max-w-md max-h-[95vh] overflow-y-auto rounded-t-2xl md:rounded-lg border border-border bg-card p-6 shadow-lg outline-none" role="dialog" aria-modal="true" aria-labelledby="bulk-quick-title">
           <div className="flex items-center justify-between">
             <p id="bulk-quick-title" className="text-lg font-semibold">Edição rápida</p>
             <Button type="button" variant="ghost" size="icon" onClick={onClose} disabled={pending} aria-label="Fechar" className="h-8 w-8">
@@ -136,8 +136,8 @@ export function BulkAdvancedEditDialog({
   return (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
-      <div className="relative flex h-full items-center justify-center p-4">
-        <div className="w-full max-w-lg rounded-lg border border-border bg-card p-6 shadow-lg outline-none" role="dialog" aria-modal="true" aria-labelledby="bulk-adv-title">
+      <div className="relative flex h-full items-end md:items-center justify-center p-0 md:p-4">
+        <div className="w-full md:max-w-lg max-h-[95vh] overflow-y-auto rounded-t-2xl md:rounded-lg border border-border bg-card p-6 shadow-lg outline-none" role="dialog" aria-modal="true" aria-labelledby="bulk-adv-title">
           <div className="flex items-center justify-between">
             <p id="bulk-adv-title" className="text-lg font-semibold">Edição avançada</p>
             <Button type="button" variant="ghost" size="icon" onClick={onClose} disabled={pending} aria-label="Fechar" className="h-8 w-8">

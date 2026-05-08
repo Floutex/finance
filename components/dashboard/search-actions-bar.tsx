@@ -12,6 +12,10 @@ import {
   Pencil,
   Plus,
   Search,
+  Settings,
+  Tag,
+  History,
+  UserPlus,
   Trash2,
   Upload,
 } from "lucide-react"
@@ -27,6 +31,10 @@ interface SearchActionsBarProps {
   onOpenBulkQuickEdit: () => void
   onOpenBulkDelete: () => void
   onClearSelection: () => void
+  isAdmin?: boolean
+  onOpenAuditLog?: () => void
+  onOpenCategories?: () => void
+  onOpenInvite?: () => void
 }
 
 export function SearchActionsBar({
@@ -40,9 +48,14 @@ export function SearchActionsBar({
   onOpenBulkQuickEdit,
   onOpenBulkDelete,
   onClearSelection,
+  isAdmin,
+  onOpenAuditLog,
+  onOpenCategories,
+  onOpenInvite,
 }: SearchActionsBarProps) {
   const searchInputRef = useRef<HTMLInputElement>(null)
   const [addMenuOpen, setAddMenuOpen] = useState(false)
+  const [adminMenuOpen, setAdminMenuOpen] = useState(false)
 
   const resultsSummary = visibleCount === 1 ? "1 transação listada" : `${visibleCount} transações listadas`
   const selectionSummary =
@@ -96,6 +109,47 @@ export function SearchActionsBar({
             </div>
 
             <div className="flex items-center gap-3">
+              {isAdmin && (
+                <div className="relative">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setAdminMenuOpen(o => !o)}
+                    className="h-10 w-10 p-0 rounded-xl"
+                    aria-label="Menu de administração"
+                  >
+                    <Settings className="h-4 w-4" />
+                  </Button>
+                  {adminMenuOpen && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setAdminMenuOpen(false)} />
+                      <div className="absolute right-0 top-full z-20 mt-2 w-56 overflow-hidden rounded-2xl border border-border/50 bg-black/90 p-1 shadow-xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-200">
+                        <button
+                          onClick={() => { setAdminMenuOpen(false); onOpenInvite?.() }}
+                          className="flex w-full items-center rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-white/10"
+                        >
+                          <UserPlus className="mr-3 h-4 w-4 text-emerald-400" />
+                          Convidar amigo
+                        </button>
+                        <button
+                          onClick={() => { setAdminMenuOpen(false); onOpenCategories?.() }}
+                          className="flex w-full items-center rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-white/10"
+                        >
+                          <Tag className="mr-3 h-4 w-4 text-purple-400" />
+                          Categorias
+                        </button>
+                        <button
+                          onClick={() => { setAdminMenuOpen(false); onOpenAuditLog?.() }}
+                          className="flex w-full items-center rounded-xl px-4 py-3 text-sm font-medium transition-colors hover:bg-white/10"
+                        >
+                          <History className="mr-3 h-4 w-4 text-blue-400" />
+                          Logs de auditoria
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
               <div className="relative flex">
                 <Button
                   onClick={onOpenCreateDialog}

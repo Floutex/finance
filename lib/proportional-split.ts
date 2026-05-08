@@ -52,13 +52,22 @@ export function buildIncomeMap(
 /**
  * Calculate each participant's share of a transaction amount.
  * Uses proportional split for Antônio+Júlia when both have income data.
+ * If customShares is provided, those values are used directly.
  */
 export function calculateShares(
   transaction: { amount: number; participants: string[] },
-  monthIncomes: Map<string, number> | undefined
+  monthIncomes: Map<string, number> | undefined,
+  customShares?: Record<string, number> | null
 ): Map<string, number> {
   const { amount, participants } = transaction
   const shares = new Map<string, number>()
+
+  if (customShares) {
+    for (const p of participants) {
+      shares.set(p, customShares[p] ?? 0)
+    }
+    return shares
+  }
 
   if (participants.length === 0) return shares
 

@@ -98,9 +98,9 @@ export function UploadDialog({
         onClick={onClose}
         aria-hidden="true"
       />
-      <div className="relative flex h-full items-center justify-center p-4" onKeyDown={handleKeyDown}>
+      <div className="relative flex h-full items-end md:items-center justify-center p-0 md:p-4" onKeyDown={handleKeyDown}>
         <div
-          className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-lg border border-border bg-card p-6 shadow-lg outline-none"
+          className="w-full md:max-w-4xl max-h-[95vh] md:max-h-[90vh] overflow-y-auto rounded-t-2xl md:rounded-lg border border-border bg-card p-6 shadow-lg outline-none"
           role="dialog"
           aria-modal="true"
           aria-labelledby="upload-dialog-title"

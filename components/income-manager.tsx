@@ -132,7 +132,7 @@ export const IncomeManager = ({
   const startEdit = (income: MonthlyIncome) => {
     setEditId(income.id)
     setEditAmount(String(income.amount))
-    setEditFixed(income.is_fixed)
+    setEditFixed(income.is_fixed ?? false)
   }
 
   // Group incomes by person

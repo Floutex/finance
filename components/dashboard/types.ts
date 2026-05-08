@@ -13,6 +13,7 @@ export type FormState = {
   date: string
   amount: string
   participants: string[]
+  customShares: Record<string, number> | null
 }
 
 export type RequestFormState = {
