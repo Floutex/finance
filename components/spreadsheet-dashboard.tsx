@@ -1,6 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
+import dynamic from "next/dynamic"
 import { useTransactions } from "@/hooks/use-transactions"
 import { useParticipants } from "@/hooks/use-participants"
 import { format, isSameMonth, parseISO, subMonths, subYears } from "date-fns"
@@ -11,10 +12,6 @@ import { ADMIN_USER, normalizeNumber, normalizeText, capitalize, PENDING_MARKER,
 import { simplifyDebts } from "@/lib/debt-simplification"
 import { buildIncomeMap, calculateShares } from "@/lib/proportional-split"
 import { uploadReceipt } from "@/lib/storage"
-import { AuditLogDialog } from "@/components/admin/audit-log-dialog"
-import { CategoriesDialog } from "@/components/admin/categories-dialog"
-import { InviteDialog } from "@/components/admin/invite-dialog"
-import { Settings } from "lucide-react"
 
 import {
   StatsCards,
@@ -25,13 +22,20 @@ import {
   TransactionTable,
   CreateTransactionDialog,
   RequestDialog,
-  UploadDialog,
   BulkDeleteDialog,
   BulkQuickEditDialog,
-  BulkAdvancedEditDialog,
   WEBHOOK_URLS,
   ITEMS_PER_PAGE,
 } from "@/components/dashboard"
+
+const UploadDialog = dynamic(
+  () => import("@/components/dashboard/upload-dialog").then(m => ({ default: m.UploadDialog })),
+  { ssr: false }
+)
+const BulkAdvancedEditDialog = dynamic(
+  () => import("@/components/dashboard/bulk-dialogs").then(m => ({ default: m.BulkAdvancedEditDialog })),
+  { ssr: false }
+)
 import type {
   Transaction,
   TransactionInsert,
@@ -92,12 +96,6 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
 
   // ── Receipt attached to "Create" form ──
   const [createReceiptFile, setCreateReceiptFile] = useState<File | null>(null)
-
-  // ── Admin dialogs ──
-  const [adminMenuOpen, setAdminMenuOpen] = useState(false)
-  const [auditDialogOpen, setAuditDialogOpen] = useState(false)
-  const [categoriesDialogOpen, setCategoriesDialogOpen] = useState(false)
-  const [inviteDialogOpen, setInviteDialogOpen] = useState(false)
 
   // ── Upload dialog ──
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
@@ -302,40 +300,67 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
 
   const totalTopTransactions = useMemo(() => topTransactions.reduce((s, i) => s + i.total, 0), [topTransactions])
 
-  // ── Chart series ──
-  const chartSeries = useMemo(() => {
-    if (transactions.length === 0) return []
-    const sorted = [...transactions].sort((a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime())
-    let runningBalance = 0
-    const dateBalanceMap = new Map<string, number>()
-    for (const t of sorted) {
+  // Defer the heavy chart/debt computations so search/filter stays responsive.
+  const deferredTransactions = useDeferredValue(transactions)
+  const deferredIncomeMap = useDeferredValue(incomeMap)
+
+  // Stable normalized form (independent of currentUser): pre-sorted by date,
+  // with participants resolved and shares pre-computed.
+  const normalizedTransactions = useMemo(() => {
+    if (deferredTransactions.length === 0) return []
+    const sorted = [...deferredTransactions].sort(
+      (a, b) => parseISO(a.date).getTime() - parseISO(b.date).getTime()
+    )
+    return sorted.map(t => {
       const participants = t.participants ?? memberNames
       const amount = t.amount ?? 0
-      if (participants.length === 0) continue
-      const yearMonth = t.date.slice(0, 7)
-      const monthIncomes = incomeMap.get(yearMonth)
-      const customShares = t.custom_shares as Record<string, number> | null | undefined
-      const shares = calculateShares({ amount, participants }, monthIncomes, customShares ?? undefined)
-      const myShare = shares.get(currentUser) ?? (amount / participants.length)
-      const userIsParticipant = participants.includes(currentUser)
+      const monthIncomes = deferredIncomeMap.get(t.date.slice(0, 7))
+      const customShares = (t.custom_shares as Record<string, number> | null) ?? undefined
+      const shares = participants.length === 0
+        ? new Map<string, number>()
+        : calculateShares({ amount, participants }, monthIncomes, customShares)
+      return {
+        date: t.date,
+        amount,
+        paid_by: t.paid_by,
+        participants,
+        shares,
+        custom_shares: customShares ?? null,
+      }
+    })
+  }, [deferredTransactions, deferredIncomeMap, memberNames])
+
+  // ── Chart series ──
+  const chartSeries = useMemo(() => {
+    if (normalizedTransactions.length === 0) return []
+    let runningBalance = 0
+    const dateBalanceMap = new Map<string, number>()
+    for (const t of normalizedTransactions) {
+      if (t.participants.length === 0) continue
+      const myShare = t.shares.get(currentUser) ?? (t.amount / t.participants.length)
+      const userIsParticipant = t.participants.includes(currentUser)
       const userIsPayer = t.paid_by === currentUser
-      if (userIsPayer && userIsParticipant) runningBalance += amount - myShare
-      else if (userIsPayer && !userIsParticipant) runningBalance += amount
+      if (userIsPayer && userIsParticipant) runningBalance += t.amount - myShare
+      else if (userIsPayer && !userIsParticipant) runningBalance += t.amount
       else if (!userIsPayer && userIsParticipant) runningBalance -= myShare
       if (userIsPayer || userIsParticipant) dateBalanceMap.set(t.date, runningBalance)
     }
     return Array.from(dateBalanceMap.entries()).map(([date, balance]) => ({ date, balance: Number(balance.toFixed(2)) }))
-  }, [transactions, currentUser, incomeMap])
+  }, [normalizedTransactions, currentUser])
 
   // ── Debt simplification ──
-  const simplifiedDebts = useMemo(() => {
-    const allTransactions = transactions.map(t => ({
+  const simplifyInputs = useMemo(() =>
+    deferredTransactions.map(t => ({
       paid_by: t.paid_by, amount: t.amount ?? 0,
       participants: t.participants ?? memberNames, date: t.date,
       custom_shares: (t.custom_shares as Record<string, number> | null) ?? null,
     }))
-    return simplifyDebts(allTransactions, incomeMap)
-  }, [transactions, incomeMap])
+  , [deferredTransactions, memberNames])
+
+  const simplifiedDebts = useMemo(
+    () => simplifyDebts(simplifyInputs, deferredIncomeMap),
+    [simplifyInputs, deferredIncomeMap]
+  )
 
   const myDebts = simplifiedDebts.filter(d => d.from === currentUser || d.to === currentUser)
   const totalBalance = useMemo(() =>
@@ -692,14 +717,6 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
         onFormChange={(updates) => setCreateForm(prev => ({ ...prev, ...updates }))}
       />
 
-      {isAdmin && (
-        <>
-          <AuditLogDialog open={auditDialogOpen} onClose={() => setAuditDialogOpen(false)} />
-          <CategoriesDialog open={categoriesDialogOpen} actor={currentUser} onClose={() => setCategoriesDialogOpen(false)} />
-          <InviteDialog open={inviteDialogOpen} onClose={() => setInviteDialogOpen(false)} />
-        </>
-      )}
-
       <UploadDialog
         open={uploadDialogOpen}
         uploadedImage={uploadedImage}
@@ -770,9 +787,6 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
           onOpenBulkDelete={() => setBulkDeleteOpen(true)}
           onClearSelection={() => setSelectedRows([])}
           isAdmin={isAdmin}
-          onOpenAuditLog={() => setAuditDialogOpen(true)}
-          onOpenCategories={() => setCategoriesDialogOpen(true)}
-          onOpenInvite={() => setInviteDialogOpen(true)}
         />
 
         <TransactionTable

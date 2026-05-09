@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useMemo } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Lock } from "lucide-react"
@@ -19,6 +19,26 @@ interface AccessControlProps {
 
 type AnimationPhase = "idle" | "greeting" | "fadeout"
 
+type Particle = {
+    width: number
+    height: number
+    left: number
+    top: number
+    duration: number
+    delay: number
+}
+
+function generateParticles(): Particle[] {
+    return Array.from({ length: 20 }, () => ({
+        width: Math.random() * 4 + 2,
+        height: Math.random() * 4 + 2,
+        left: Math.random() * 100,
+        top: 50 + Math.random() * 30,
+        duration: 1.5 + Math.random() * 2,
+        delay: Math.random() * 0.8,
+    }))
+}
+
 export function AccessControl({ onLogin }: AccessControlProps) {
     const [pin, setPin] = useState("")
     const [error, setError] = useState("")
@@ -26,26 +46,36 @@ export function AccessControl({ onLogin }: AccessControlProps) {
     const [matchedUser, setMatchedUser] = useState<string>("")
     const [matchedColor, setMatchedColor] = useState<string>("")
 
-    const greeting = useMemo(() => getGreeting(), [])
+    const fadeoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const loginTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+    const greeting = useMemo(() => getGreeting(), [])
     const greetingText = `${greeting}, ${matchedUser}`
+
+    // Particles are generated once when the greeting phase starts — not on every render.
+    const [particles, setParticles] = useState<Particle[]>([])
+    useEffect(() => {
+        if (phase !== "idle" && particles.length === 0) {
+            setParticles(generateParticles())
+        }
+    }, [phase, particles.length])
+
+    useEffect(() => {
+        return () => {
+            if (fadeoutTimerRef.current) clearTimeout(fadeoutTimerRef.current)
+            if (loginTimerRef.current) clearTimeout(loginTimerRef.current)
+            if (errorTimerRef.current) clearTimeout(errorTimerRef.current)
+        }
+    }, [])
 
     const startWelcomeAnimation = useCallback((userName: string, userColor: string) => {
         setMatchedUser(userName)
         setMatchedColor(userColor)
-
-        // Go straight to greeting phase
         setPhase("greeting")
 
-        // Phase 2: Show greeting for 2200ms then fade out
-        setTimeout(() => {
-            setPhase("fadeout")
-        }, 2200)
-
-        // Phase 3: Complete login after fade
-        setTimeout(() => {
-            onLogin(userName)
-        }, 2800)
+        fadeoutTimerRef.current = setTimeout(() => setPhase("fadeout"), 2200)
+        loginTimerRef.current = setTimeout(() => onLogin(userName), 2800)
     }, [onLogin])
 
     const handlePinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -54,14 +84,14 @@ export function AccessControl({ onLogin }: AccessControlProps) {
         setPin(value)
         setError("")
 
-        // Auto-login quando o PIN tiver 4 dígitos
         if (value.length === 4) {
             const user = USERS.find((u) => u.pin === value)
             if (user) {
                 startWelcomeAnimation(user.name, user.hex)
             } else {
                 setError("PIN incorreto")
-                setTimeout(() => {
+                if (errorTimerRef.current) clearTimeout(errorTimerRef.current)
+                errorTimerRef.current = setTimeout(() => {
                     setPin("")
                     setError("")
                 }, 1500)
@@ -69,20 +99,16 @@ export function AccessControl({ onLogin }: AccessControlProps) {
         }
     }
 
-    // Determine visibility states
     const showCard = phase === "idle"
     const showGreeting = phase === "greeting" || phase === "fadeout"
 
     return (
         <div
-            className="flex min-h-screen items-center justify-center p-4 relative overflow-hidden"
-            style={{
-                background: "#000000"
-            }}
+            className="flex min-h-screen items-center justify-center p-4 relative overflow-hidden bg-black"
         >
-            {/* Animated gradient overlays - Default multi-color */}
+            {/* Animated gradient overlays */}
             <div
-                className="absolute inset-0"
+                className="absolute inset-0 animate-bg-pulse will-change-transform"
                 style={{
                     background: `
                         radial-gradient(circle at 0% 0%, ${USERS[1].hex} 0%, transparent 50%),
@@ -92,89 +118,21 @@ export function AccessControl({ onLogin }: AccessControlProps) {
                     `,
                     opacity: showGreeting ? 0 : 0.3,
                     transition: "opacity 1s ease-in-out",
-                    animation: "bgPulse 8s ease-in-out infinite"
                 }}
             />
 
-            {/* Personalized color overlay for the logged-in user */}
             {matchedColor && (
                 <div
-                    className="absolute inset-0"
+                    className="absolute inset-0 animate-bg-pulse-fast will-change-transform"
                     style={{
                         background: `radial-gradient(circle at 50% 50%, ${matchedColor} 0%, transparent 80%)`,
                         opacity: showGreeting ? 0.8 : 0,
                         transition: "opacity 1s ease-in-out",
-                        animation: "bgPulseFast 3s ease-in-out infinite"
                     }}
                 />
             )}
 
-            <style jsx>{`
-                @keyframes bgPulse {
-                    0%, 100% { transform: scale(1); }
-                    50% { transform: scale(1.05); }
-                }
-
-                @keyframes bgPulseFast {
-                    0%, 100% { transform: scale(1); opacity: 0.8; }
-                    50% { transform: scale(1.1); opacity: 1; }
-                }
-
-                @keyframes cardFade {
-                    0% { opacity: 1; transform: scale(1) translateY(0); }
-                    100% { opacity: 0; transform: scale(0.95) translateY(20px); }
-                }
-
-                @keyframes greetingIn {
-                    0% { opacity: 0; transform: translateY(30px); }
-                    100% { opacity: 1; transform: translateY(0); }
-                }
-
-                @keyframes greetingOut {
-                    0% { opacity: 1; transform: scale(1); }
-                    100% { opacity: 0; transform: scale(1.05); }
-                }
-
-                @keyframes letterReveal {
-                    0% { opacity: 0; transform: translateY(20px) scale(0.8); filter: blur(8px); }
-                    100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
-                }
-
-                @keyframes glowPulse {
-                    0%, 100% { text-shadow: 0 0 20px rgba(255,255,255,0.3), 0 0 40px rgba(255,255,255,0.1); }
-                    50% { text-shadow: 0 0 30px rgba(255,255,255,0.5), 0 0 60px rgba(255,255,255,0.2), 0 0 80px rgba(255,255,255,0.1); }
-                }
-
-                @keyframes particles {
-                    0% { opacity: 0; transform: translateY(0) scale(0); }
-                    50% { opacity: 1; }
-                    100% { opacity: 0; transform: translateY(-100px) scale(1); }
-                }
-
-                .greeting-container {
-                    animation: greetingIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-                }
-
-                .greeting-fadeout {
-                    animation: greetingOut 0.6s ease-in-out forwards;
-                }
-
-                .greeting-letter {
-                    display: inline-block;
-                    opacity: 0;
-                    animation: letterReveal 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-                }
-
-                .greeting-glow {
-                    animation: glowPulse 2s ease-in-out infinite;
-                }
-
-                .greeting-glow {
-                    animation: glowPulse 2s ease-in-out infinite;
-                }
-            `}</style>
-
-            {/* ─── PIN Card ─── */}
+            {/* PIN Card */}
             {showCard && (
                 <Card className="w-full max-w-md bg-black/60 backdrop-blur-xl border-white/10 relative z-10">
                     <CardHeader className="text-center">
@@ -213,43 +171,45 @@ export function AccessControl({ onLogin }: AccessControlProps) {
                 </Card>
             )}
 
-            {/* ─── Greeting Screen ─── */}
+            {/* Greeting Screen */}
             {showGreeting && (
                 <div
-                    className={`absolute inset-0 flex flex-col items-center justify-center z-20 ${phase === "fadeout" ? "greeting-fadeout" : "greeting-container"}`}
+                    className={
+                        "absolute inset-0 flex flex-col items-center justify-center z-20 " +
+                        (phase === "fadeout" ? "animate-greeting-out" : "animate-greeting-in")
+                    }
                 >
-                    {/* Decorative particles */}
                     <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                        {Array.from({ length: 20 }).map((_, i) => (
+                        {particles.map((p, i) => (
                             <div
                                 key={i}
-                                className="absolute rounded-full bg-white/20"
+                                className="absolute rounded-full bg-white/20 animate-particle-rise"
                                 style={{
-                                    width: `${Math.random() * 4 + 2}px`,
-                                    height: `${Math.random() * 4 + 2}px`,
-                                    left: `${Math.random() * 100}%`,
-                                    top: `${50 + Math.random() * 30}%`,
-                                    animation: `particles ${1.5 + Math.random() * 2}s ease-out ${Math.random() * 0.8}s forwards`
+                                    width: `${p.width}px`,
+                                    height: `${p.height}px`,
+                                    left: `${p.left}%`,
+                                    top: `${p.top}%`,
+                                    animationDuration: `${p.duration}s`,
+                                    animationDelay: `${p.delay}s`,
                                 }}
                             />
                         ))}
                     </div>
 
-                    {/* Greeting text */}
                     <h1
-                        className="text-5xl md:text-7xl font-bold text-white greeting-glow mb-4"
+                        className="text-5xl md:text-7xl font-bold text-white animate-glow-pulse mb-4"
                         style={{ fontFamily: "'Inter', sans-serif" }}
                     >
                         {greetingText.split("").map((letter, i) => (
                             <span
                                 key={i}
-                                className="greeting-letter"
+                                className="inline-block opacity-0 animate-letter-reveal"
                                 style={{
                                     animationDelay: `${i * 50}ms`,
-                                    ...(letter === " " ? { width: "0.3em", display: "inline-block" } : {})
+                                    ...(letter === " " ? { width: "0.3em" } : {}),
                                 }}
                             >
-                                {letter === " " ? "\u00A0" : letter}
+                                {letter === " " ? " " : letter}
                             </span>
                         ))}
                     </h1>

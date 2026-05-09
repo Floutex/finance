@@ -56,6 +56,9 @@ export const INCOME_USERS = ["Antônio", "Júlia"]
 /** Admin (audit log, categories management, invite link) */
 export const ADMIN_USER = "Antônio"
 
+/** sessionStorage key for the currently logged-in user (shared between / and /admin) */
+export const SESSION_USER_KEY = "financas:user"
+
 /** @deprecated Use useParticipants() hook instead. Static array kept only as a fallback for transactions persisted before the participants table existed. */
 export const PARTICIPANTS = USERS.map(u => u.name)
 

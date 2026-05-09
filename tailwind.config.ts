@@ -61,6 +61,13 @@ const config: Config = {
         "scale-in": "scale-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) both",
         "blur-in": "blur-in 0.8s cubic-bezier(0.16, 1, 0.3, 1) both",
         "rise-up": "rise-up 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) both",
+        "bg-pulse": "bg-pulse 8s ease-in-out infinite",
+        "bg-pulse-fast": "bg-pulse-fast 3s ease-in-out infinite",
+        "greeting-in": "greeting-in 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+        "greeting-out": "greeting-out 0.6s ease-in-out forwards",
+        "letter-reveal": "letter-reveal 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+        "glow-pulse": "glow-pulse 2s ease-in-out infinite",
+        "particle-rise": "particle-rise 2s ease-out forwards",
       },
       keyframes: {
         "accordion-down": {
@@ -102,6 +109,35 @@ const config: Config = {
         "rise-up": {
           "0%": { transform: "translateY(40px) scale(0.95)", opacity: "0" },
           "100%": { transform: "translateY(0) scale(1)", opacity: "1" }
+        },
+        "bg-pulse": {
+          "0%, 100%": { transform: "scale(1)" },
+          "50%": { transform: "scale(1.05)" }
+        },
+        "bg-pulse-fast": {
+          "0%, 100%": { transform: "scale(1)", opacity: "0.8" },
+          "50%": { transform: "scale(1.1)", opacity: "1" }
+        },
+        "greeting-in": {
+          "0%": { opacity: "0", transform: "translateY(30px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" }
+        },
+        "greeting-out": {
+          "0%": { opacity: "1", transform: "scale(1)" },
+          "100%": { opacity: "0", transform: "scale(1.05)" }
+        },
+        "letter-reveal": {
+          "0%": { opacity: "0", transform: "translateY(20px) scale(0.8)", filter: "blur(8px)" },
+          "100%": { opacity: "1", transform: "translateY(0) scale(1)", filter: "blur(0)" }
+        },
+        "glow-pulse": {
+          "0%, 100%": { textShadow: "0 0 20px rgba(255,255,255,0.3), 0 0 40px rgba(255,255,255,0.1)" },
+          "50%": { textShadow: "0 0 30px rgba(255,255,255,0.5), 0 0 60px rgba(255,255,255,0.2), 0 0 80px rgba(255,255,255,0.1)" }
+        },
+        "particle-rise": {
+          "0%": { opacity: "0", transform: "translateY(0) scale(0)" },
+          "50%": { opacity: "1" },
+          "100%": { opacity: "0", transform: "translateY(-100px) scale(1)" }
         }
       }
     }

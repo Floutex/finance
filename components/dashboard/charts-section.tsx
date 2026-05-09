@@ -1,10 +1,16 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import { Card } from "@/components/ui/card"
 import { AnimatedNumber } from "@/components/ui/animated-number"
 import { CategoryPieChart } from "@/components/category-pie-chart"
-import { BalanceChart } from "@/components/balance-chart"
+import { ChartSkeleton } from "@/components/dashboard/chart-skeleton"
 import { formatCurrency } from "@/lib/constants"
+
+const BalanceChart = dynamic(
+  () => import("@/components/balance-chart").then(m => ({ default: m.BalanceChart })),
+  { ssr: false, loading: () => <ChartSkeleton /> }
+)
 
 interface CategoryTotal {
   category: string

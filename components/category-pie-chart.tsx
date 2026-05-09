@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react"
+import { useCallback, useMemo, useRef, useState, useTransition } from "react"
 import { cn, getUserColors } from "@/components/ui/utils"
 
 type CategoryTotal = {
@@ -54,6 +54,7 @@ export const CategoryPieChart = (props: { data: CategoryTotal[] }) => {
   const svgRef = useRef<SVGSVGElement | null>(null)
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null)
+  const [, startHoverTransition] = useTransition()
 
   const total = useMemo(() => {
     return props.data.reduce((sum, item) => sum + item.total, 0)
@@ -149,29 +150,26 @@ export const CategoryPieChart = (props: { data: CategoryTotal[] }) => {
   const handleMouseMove = useCallback(
     (event: React.MouseEvent<SVGSVGElement>) => {
       const index = getIndexFromEvent(event)
-      if (index !== null) {
+      const rect = svgRef.current?.getBoundingClientRect()
+      const nextPos = index !== null && rect
+        ? {
+            x: (event.clientX - rect.left) * (300 / rect.width),
+            y: (event.clientY - rect.top) * (300 / rect.height),
+          }
+        : null
+      startHoverTransition(() => {
         setHoveredIndex(index)
-        const rect = svgRef.current?.getBoundingClientRect()
-        if (rect) {
-          const viewBox = { width: 300, height: 300 }
-          const scaleX = viewBox.width / rect.width
-          const scaleY = viewBox.height / rect.height
-          setTooltipPosition({
-            x: (event.clientX - rect.left) * scaleX,
-            y: (event.clientY - rect.top) * scaleY
-          })
-        }
-      } else {
-        setHoveredIndex(null)
-        setTooltipPosition(null)
-      }
+        setTooltipPosition(nextPos)
+      })
     },
     [getIndexFromEvent]
   )
 
   const handleMouseLeave = useCallback(() => {
-    setHoveredIndex(null)
-    setTooltipPosition(null)
+    startHoverTransition(() => {
+      setHoveredIndex(null)
+      setTooltipPosition(null)
+    })
   }, [])
 
   if (props.data.length === 0 || total === 0) {

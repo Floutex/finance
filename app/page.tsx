@@ -1,10 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { SpreadsheetDashboard } from "@/components/spreadsheet-dashboard"
 import { AccessControl } from "@/components/access-control"
 import { IncomeManager } from "@/components/income-manager"
 import { getUserGradient } from "@/components/ui/utils"
+import { SESSION_USER_KEY, USERS } from "@/lib/constants"
 // Import cache module to trigger prefetching of transactions in background
 import "@/lib/transactions-cache"
 
@@ -13,8 +14,25 @@ export const dynamic = 'force-dynamic'
 const INCOME_USERS = ["Antônio", "Júlia"]
 
 export default function HomePage() {
-  const [currentUser, setCurrentUser] = useState<string | null>(null)
+  const [currentUser, setCurrentUserState] = useState<string | null>(null)
   const [view, setView] = useState<"dashboard" | "income">("dashboard")
+
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem(SESSION_USER_KEY)
+      if (stored && USERS.some(u => u.name === stored)) {
+        setCurrentUserState(stored)
+      }
+    } catch { }
+  }, [])
+
+  const setCurrentUser = (user: string | null) => {
+    setCurrentUserState(user)
+    try {
+      if (user) sessionStorage.setItem(SESSION_USER_KEY, user)
+      else sessionStorage.removeItem(SESSION_USER_KEY)
+    } catch { }
+  }
 
   return (
     <>
