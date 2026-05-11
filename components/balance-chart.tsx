@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { memo, useMemo } from "react"
 import { format, parseISO } from "date-fns"
 import {
   ResponsiveContainer,
@@ -89,40 +89,36 @@ interface BalanceChartProps {
   endDate?: string
 }
 
-export const BalanceChart = (props: BalanceChartProps) => {
+function BalanceChartImpl(props: BalanceChartProps) {
   const userColor = useMemo(() => {
     return props.currentUser ? getUserColor(props.currentUser) : "hsl(var(--primary))"
   }, [props.currentUser])
 
-  const normalizedSeries = useMemo(() => {
-    return props.series
-      .map(point => ({
-        date: normalizeDate(point.date),
-        balance: point.balance
-      }))
-      .sort((first, second) => parseISO(first.date).getTime() - parseISO(second.date).getTime())
-  }, [props.series])
+  // Uma única passada: normaliza, ordena, filtra por janela de data e pré-formata.
+  // `parseISO` no filtro vira comparação direta de string yyyy-MM-dd (lexicográfica = cronológica).
+  const { chartData, filteredSeries, hasAnyData } = useMemo(() => {
+    if (props.series.length === 0) {
+      return { chartData: [], filteredSeries: [] as BalancePoint[], hasAnyData: false }
+    }
+    const normalized = props.series
+      .map(point => ({ date: normalizeDate(point.date), balance: point.balance }))
+      .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
 
-  const filteredSeries = useMemo(() => {
-    if (normalizedSeries.length === 0) return []
-    const start = props.startDate ? parseISO(props.startDate) : null
-    const end = props.endDate ? parseISO(props.endDate) : null
-    if (!start && !end) return normalizedSeries
-    const subset = normalizedSeries.filter(point => {
-      const current = parseISO(point.date)
-      const afterStart = start ? current >= start : true
-      const beforeEnd = end ? current <= end : true
-      return afterStart && beforeEnd
-    })
-    return subset.length === 0 ? normalizedSeries : subset
-  }, [normalizedSeries, props.startDate, props.endDate])
-
-  const chartData = useMemo(() => {
-    return filteredSeries.map(point => ({
+    const start = props.startDate || null
+    const end = props.endDate || null
+    let subset = normalized
+    if (start || end) {
+      const filtered = normalized.filter(p =>
+        (!start || p.date >= start) && (!end || p.date <= end)
+      )
+      if (filtered.length > 0) subset = filtered
+    }
+    const data = subset.map(point => ({
       ...point,
-      formattedDate: format(parseISO(point.date), "dd/MM/yyyy")
+      formattedDate: format(parseISO(point.date), "dd/MM/yyyy"),
     }))
-  }, [filteredSeries])
+    return { chartData: data, filteredSeries: subset, hasAnyData: normalized.length > 0 }
+  }, [props.series, props.startDate, props.endDate])
 
   const variationSummary = useMemo(() => {
     if (filteredSeries.length === 0) return null
@@ -133,7 +129,7 @@ export const BalanceChart = (props: BalanceChartProps) => {
     return { change, percentChange }
   }, [filteredSeries])
 
-  if (normalizedSeries.length === 0) {
+  if (!hasAnyData) {
     return (
       <div className="flex h-80 w-full items-center justify-center rounded-md border border-dashed border-muted-foreground/40 text-sm text-muted-foreground">
         Sem dados para o período selecionado
@@ -214,3 +210,5 @@ export const BalanceChart = (props: BalanceChartProps) => {
     </article>
   )
 }
+
+export const BalanceChart = memo(BalanceChartImpl)

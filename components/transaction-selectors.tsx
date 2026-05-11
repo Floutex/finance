@@ -25,7 +25,7 @@ export function invalidateCategoriesCache() {
     categoriesSubscribers.forEach(cb => cb())
 }
 
-export function subscribeCategories(cb: () => void): () => void {
+function subscribeCategories(cb: () => void): () => void {
     categoriesSubscribers.add(cb)
     return () => { categoriesSubscribers.delete(cb) }
 }

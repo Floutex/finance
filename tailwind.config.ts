@@ -103,8 +103,8 @@ const config: Config = {
           "100%": { transform: "scale(1)", opacity: "1" }
         },
         "blur-in": {
-          "0%": { opacity: "0", filter: "blur(12px)", transform: "scale(0.96)" },
-          "100%": { opacity: "1", filter: "blur(0)", transform: "scale(1)" }
+          "0%": { opacity: "0", transform: "scale(0.96)" },
+          "100%": { opacity: "1", transform: "scale(1)" }
         },
         "rise-up": {
           "0%": { transform: "translateY(40px) scale(0.95)", opacity: "0" },
@@ -127,12 +127,12 @@ const config: Config = {
           "100%": { opacity: "0", transform: "scale(1.05)" }
         },
         "letter-reveal": {
-          "0%": { opacity: "0", transform: "translateY(20px) scale(0.8)", filter: "blur(8px)" },
-          "100%": { opacity: "1", transform: "translateY(0) scale(1)", filter: "blur(0)" }
+          "0%": { opacity: "0", transform: "translateY(20px) scale(0.8)" },
+          "100%": { opacity: "1", transform: "translateY(0) scale(1)" }
         },
         "glow-pulse": {
-          "0%, 100%": { textShadow: "0 0 20px rgba(255,255,255,0.3), 0 0 40px rgba(255,255,255,0.1)" },
-          "50%": { textShadow: "0 0 30px rgba(255,255,255,0.5), 0 0 60px rgba(255,255,255,0.2), 0 0 80px rgba(255,255,255,0.1)" }
+          "0%, 100%": { textShadow: "0 0 16px rgba(255,255,255,0.25)" },
+          "50%": { textShadow: "0 0 22px rgba(255,255,255,0.4)" }
         },
         "particle-rise": {
           "0%": { opacity: "0", transform: "translateY(0) scale(0)" },

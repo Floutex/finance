@@ -7,7 +7,7 @@ export const Card = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement> & 
     <div
       ref={ref}
       className={cn(
-        "rounded-2xl border bg-card text-card-foreground shadow-sm backdrop-blur-xl transition-all duration-300",
+        "rounded-2xl border bg-card text-card-foreground shadow-sm backdrop-blur-md transition-colors duration-300",
         variant === "default" && "border-border bg-black/40 hover:border-border/80 hover:bg-black/50 hover:shadow-md",
         variant === "highlight" && "border-primary/20 bg-gradient-to-br from-primary/5 via-primary/0 to-transparent hover:border-primary/40 hover:from-primary/10 hover:shadow-primary/5",
         className

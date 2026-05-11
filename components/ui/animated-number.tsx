@@ -34,6 +34,7 @@ export function AnimatedNumber({
     const animationRef = useRef<number>()
     const timeoutRef = useRef<NodeJS.Timeout>()
     const hasInitialized = useRef(animateOnMount)
+    const hasPlayedMountAnimation = useRef(!animateOnMount)
 
     useEffect(() => {
         // Immediate set on mount if not animating on mount
@@ -50,13 +51,18 @@ export function AnimatedNumber({
 
         const startValue = previousValueRef.current
         const endValue = value
+        // Após o mount, updates subsequentes usam duração curta —
+        // dezenas de AnimatedNumbers re-animando ao filtrar custavam várias rAF concorrentes.
+        const isFirstAnim = !hasPlayedMountAnimation.current
+        const effectiveDuration = isFirstAnim ? duration : Math.min(duration, 300)
+        const effectiveDelay = isFirstAnim ? delay : 0
 
         const startAnimation = () => {
             const startTime = performance.now()
 
             const animate = (currentTime: number) => {
                 const elapsed = currentTime - startTime
-                const progress = Math.min(elapsed / duration, 1)
+                const progress = Math.min(elapsed / effectiveDuration, 1)
 
                 const easedProgress = easeOutExpo(progress)
                 const currentVal = startValue + (endValue - startValue) * easedProgress
@@ -68,6 +74,7 @@ export function AnimatedNumber({
                 } else {
                     setDisplayValue(endValue)
                     previousValueRef.current = endValue
+                    hasPlayedMountAnimation.current = true
                 }
             }
 
@@ -78,9 +85,9 @@ export function AnimatedNumber({
             animationRef.current = requestAnimationFrame(animate)
         }
 
-        if (delay > 0) {
+        if (effectiveDelay > 0) {
             if (timeoutRef.current) clearTimeout(timeoutRef.current)
-            timeoutRef.current = setTimeout(startAnimation, delay)
+            timeoutRef.current = setTimeout(startAnimation, effectiveDelay)
         } else {
             startAnimation()
         }

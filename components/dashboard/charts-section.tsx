@@ -1,5 +1,6 @@
 "use client"
 
+import { memo, useEffect, useRef, useState } from "react"
 import dynamic from "next/dynamic"
 import { Card } from "@/components/ui/card"
 import { AnimatedNumber } from "@/components/ui/animated-number"
@@ -30,7 +31,41 @@ interface ChartsSectionProps {
   endDate?: string
 }
 
-export function ChartsSection({
+// Só monta o filho quando o wrapper entra na viewport.
+// recharts é pesado e fica abaixo das pizzas — em mobile costuma carregar fora da tela.
+function LazyOnVisible({ children, minHeight = 320 }: { children: React.ReactNode; minHeight?: number }) {
+  const ref = useRef<HTMLDivElement | null>(null)
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    if (visible) return
+    const node = ref.current
+    if (!node) return
+    if (typeof IntersectionObserver === "undefined") {
+      setVisible(true)
+      return
+    }
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries.some(e => e.isIntersecting)) {
+          setVisible(true)
+          observer.disconnect()
+        }
+      },
+      { rootMargin: "200px" }
+    )
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [visible])
+
+  return (
+    <div ref={ref} style={{ minHeight }}>
+      {visible ? children : <ChartSkeleton />}
+    </div>
+  )
+}
+
+function ChartsSectionImpl({
   categoryTotals,
   totalCategoryAmount,
   globalCategoryTotals,
@@ -79,8 +114,12 @@ export function ChartsSection({
       </Card>
 
       <div className="animate-rise-up [animation-delay:300ms]">
-        <BalanceChart series={chartSeries} currentUser={currentUser} startDate={startDate} endDate={endDate} />
+        <LazyOnVisible>
+          <BalanceChart series={chartSeries} currentUser={currentUser} startDate={startDate} endDate={endDate} />
+        </LazyOnVisible>
       </div>
     </>
   )
 }
+
+export const ChartsSection = memo(ChartsSectionImpl)

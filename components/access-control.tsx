@@ -29,7 +29,7 @@ type Particle = {
 }
 
 function generateParticles(): Particle[] {
-    return Array.from({ length: 20 }, () => ({
+    return Array.from({ length: 8 }, () => ({
         width: Math.random() * 4 + 2,
         height: Math.random() * 4 + 2,
         left: Math.random() * 100,

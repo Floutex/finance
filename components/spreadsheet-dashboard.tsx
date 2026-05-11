@@ -259,44 +259,45 @@ export const SpreadsheetDashboard = ({ currentUser }: { currentUser: string }) =
   }, [])
 
   // ── Stats ──
+  // Independente de sort: filtro/data/busca já cobrem o período.
   const periodStats = useMemo(() => {
     let mySpend = 0, totalSpend = 0
-    sortedTransactions.forEach(t => {
+    filteredTransactions.forEach(t => {
       totalSpend += (t.amount ?? 0)
       if (t.paid_by === currentUser) mySpend += (t.amount ?? 0)
     })
     return { mySpend, totalSpend }
-  }, [sortedTransactions, currentUser])
+  }, [filteredTransactions, currentUser])
 
   // ── Category totals ──
   const categoryTotals = useMemo(() => {
     const map = new Map<string, number>()
-    sortedTransactions.forEach(t => {
+    filteredTransactions.forEach(t => {
       if (t.paid_by === currentUser) {
         const key = normalizeText(t.category) || "Sem categoria"
         map.set(key, (map.get(key) ?? 0) + (t.amount ?? 0))
       }
     })
     return Array.from(map.entries()).map(([category, total]) => ({ category, total })).sort((a, b) => a.category.localeCompare(b.category, "pt-BR"))
-  }, [sortedTransactions, currentUser])
+  }, [filteredTransactions, currentUser])
 
   const totalCategoryAmount = useMemo(() => categoryTotals.reduce((s, i) => s + i.total, 0), [categoryTotals])
 
   const globalCategoryTotals = useMemo(() => {
     const map = new Map<string, number>()
-    sortedTransactions.forEach(t => {
+    filteredTransactions.forEach(t => {
       const key = normalizeText(t.category) || "Sem categoria"
       map.set(key, (map.get(key) ?? 0) + (t.amount ?? 0))
     })
     return Array.from(map.entries()).map(([category, total]) => ({ category, total })).sort((a, b) => b.total - a.total)
-  }, [sortedTransactions])
+  }, [filteredTransactions])
 
   const totalGlobalCategoryAmount = useMemo(() => globalCategoryTotals.reduce((s, i) => s + i.total, 0), [globalCategoryTotals])
 
   const topTransactions = useMemo(() =>
-    [...sortedTransactions].sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0)).slice(0, 10)
+    [...filteredTransactions].sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0)).slice(0, 10)
       .map(t => ({ category: normalizeText(t.description) || "Sem descrição", total: t.amount ?? 0 }))
-  , [sortedTransactions])
+  , [filteredTransactions])
 
   const totalTopTransactions = useMemo(() => topTransactions.reduce((s, i) => s + i.total, 0), [topTransactions])
 

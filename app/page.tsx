@@ -5,13 +5,11 @@ import { SpreadsheetDashboard } from "@/components/spreadsheet-dashboard"
 import { AccessControl } from "@/components/access-control"
 import { IncomeManager } from "@/components/income-manager"
 import { getUserGradient } from "@/components/ui/utils"
-import { SESSION_USER_KEY, USERS } from "@/lib/constants"
+import { INCOME_USERS, SESSION_USER_KEY, USERS } from "@/lib/constants"
 // Import cache module to trigger prefetching of transactions in background
 import "@/lib/transactions-cache"
 
 export const dynamic = 'force-dynamic'
-
-const INCOME_USERS = ["Antônio", "Júlia"]
 
 export default function HomePage() {
   const [currentUser, setCurrentUserState] = useState<string | null>(null)

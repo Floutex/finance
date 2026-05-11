@@ -8,7 +8,7 @@ const PROPORTIONAL_PAIR = ["Antônio", "Júlia"]
  * Resolve the income for a person in a given month.
  * First checks for an exact match, then falls back to the most recent is_fixed=true entry.
  */
-export function resolveIncomeForMonth(
+function resolveIncomeForMonth(
   person: string,
   yearMonth: string,
   allIncomes: MonthlyIncome[]
@@ -117,18 +117,4 @@ export function calculateShares(
   }
 
   return shares
-}
-
-/**
- * Get a specific person's share in a transaction, using monthly income data.
- */
-export function getPersonShare(
-  participant: string,
-  transaction: { amount: number; participants: string[]; date: string },
-  incomeMap: Map<string, Map<string, number>>
-): number {
-  const yearMonth = transaction.date.slice(0, 7)
-  const monthIncomes = incomeMap.get(yearMonth)
-  const shares = calculateShares(transaction, monthIncomes)
-  return shares.get(participant) ?? (transaction.amount / Math.max(transaction.participants.length, 1))
 }

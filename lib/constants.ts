@@ -59,12 +59,7 @@ export const ADMIN_USER = "Antônio"
 /** sessionStorage key for the currently logged-in user (shared between / and /admin) */
 export const SESSION_USER_KEY = "financas:user"
 
-/** @deprecated Use useParticipants() hook instead. Static array kept only as a fallback for transactions persisted before the participants table existed. */
-export const PARTICIPANTS = USERS.map(u => u.name)
-
 const userMap = new Map(USERS.map(u => [u.name, u]))
-
-export const getUserConfig = (name: string): UserConfig | undefined => userMap.get(name)
 
 export const getUserGradient = (name: string | null): string =>
   (name && userMap.get(name)?.gradient) || ""
@@ -74,9 +69,6 @@ export const getUserColorClasses = (name: string): string =>
 
 export const getUserColor = (name: string): string =>
   userMap.get(name)?.hsl ?? "hsl(var(--primary))"
-
-export const getUserHex = (name: string): string =>
-  userMap.get(name)?.hex ?? "#64748b"
 
 /** Ordered color palette: user colors first, then extras for categories */
 export const getUserColors = (): string[] => [

@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useRef, useState, useTransition } from "react"
-import { cn, getUserColors } from "@/components/ui/utils"
+import { memo, useMemo, useState } from "react"
+import { getUserColors } from "@/components/ui/utils"
 
 type CategoryTotal = {
   category: string
@@ -49,12 +49,8 @@ const calculatePieSlice = (
   }
 }
 
-export const CategoryPieChart = (props: { data: CategoryTotal[] }) => {
-  const containerRef = useRef<HTMLDivElement | null>(null)
-  const svgRef = useRef<SVGSVGElement | null>(null)
+function CategoryPieChartImpl(props: { data: CategoryTotal[] }) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
-  const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null)
-  const [, startHoverTransition] = useTransition()
 
   const total = useMemo(() => {
     return props.data.reduce((sum, item) => sum + item.total, 0)
@@ -79,9 +75,6 @@ export const CategoryPieChart = (props: { data: CategoryTotal[] }) => {
 
       const slice = calculatePieSlice(startAngle, endAngle, radius, centerX, centerY)
 
-      const normalizedStartAngle = (startAngle + 90 + 360) % 360
-      const normalizedEndAngle = (endAngle + 90 + 360) % 360
-
       currentAngle = endAngle
 
       return {
@@ -91,86 +84,9 @@ export const CategoryPieChart = (props: { data: CategoryTotal[] }) => {
         percentage,
         color: colors[index % colors.length],
         index,
-        startAngle: normalizedStartAngle,
-        endAngle: normalizedEndAngle
       }
     })
   }, [props.data, total])
-
-  const getIndexFromEvent = useCallback(
-    (event: React.MouseEvent<SVGSVGElement>) => {
-      if (!svgRef.current || slices.length === 0) {
-        return null
-      }
-      const rect = svgRef.current.getBoundingClientRect()
-      const viewBox = { x: 0, y: 0, width: 300, height: 300 }
-
-      const scaleX = viewBox.width / rect.width
-      const scaleY = viewBox.height / rect.height
-
-      const svgX = (event.clientX - rect.left) * scaleX
-      const svgY = (event.clientY - rect.top) * scaleY
-
-      const centerX = 150
-      const centerY = 150
-      const radius = 120
-
-      const dx = svgX - centerX
-      const dy = svgY - centerY
-      const distance = Math.sqrt(dx * dx + dy * dy)
-
-      if (distance > radius) {
-        return null
-      }
-
-      let angle = (Math.atan2(dy, dx) * 180) / Math.PI
-      angle = (angle + 90 + 360) % 360
-
-      for (let i = 0; i < slices.length; i++) {
-        const slice = slices[i]
-        const sliceStart = slice.startAngle
-        const sliceEnd = slice.endAngle
-
-        if (sliceStart <= sliceEnd) {
-          if (angle >= sliceStart && angle < sliceEnd) {
-            return i
-          }
-        } else {
-          if (angle >= sliceStart || angle < sliceEnd) {
-            return i
-          }
-        }
-      }
-
-      return null
-    },
-    [slices]
-  )
-
-  const handleMouseMove = useCallback(
-    (event: React.MouseEvent<SVGSVGElement>) => {
-      const index = getIndexFromEvent(event)
-      const rect = svgRef.current?.getBoundingClientRect()
-      const nextPos = index !== null && rect
-        ? {
-            x: (event.clientX - rect.left) * (300 / rect.width),
-            y: (event.clientY - rect.top) * (300 / rect.height),
-          }
-        : null
-      startHoverTransition(() => {
-        setHoveredIndex(index)
-        setTooltipPosition(nextPos)
-      })
-    },
-    [getIndexFromEvent]
-  )
-
-  const handleMouseLeave = useCallback(() => {
-    startHoverTransition(() => {
-      setHoveredIndex(null)
-      setTooltipPosition(null)
-    })
-  }, [])
 
   if (props.data.length === 0 || total === 0) {
     return (
@@ -183,40 +99,38 @@ export const CategoryPieChart = (props: { data: CategoryTotal[] }) => {
   const hoveredSlice = hoveredIndex !== null ? slices[hoveredIndex] : null
 
   return (
-    <div ref={containerRef} className="relative w-full">
+    <div className="relative w-full">
       <svg
-        ref={svgRef}
         viewBox="0 0 300 300"
         className="w-full"
         style={{ aspectRatio: "1 / 1", maxHeight: "400px" }}
-        onMouseMove={handleMouseMove}
-        onMouseLeave={handleMouseLeave}
         aria-label="Gráfico de pizza por categoria"
         role="img"
       >
         {slices.map((slice, index) => (
-          <g key={slice.category}>
-            <path
-              d={slice.path}
-              fill={slice.color}
-              opacity={hoveredIndex !== null && hoveredIndex !== index ? 0.5 : 1}
-              stroke="hsl(var(--background))"
-              strokeWidth={2}
-              style={{
-                cursor: "pointer",
-                transition: "opacity 0.2s"
-              }}
-            />
-          </g>
+          <path
+            key={slice.category}
+            d={slice.path}
+            fill={slice.color}
+            opacity={hoveredIndex !== null && hoveredIndex !== index ? 0.5 : 1}
+            stroke="hsl(var(--background))"
+            strokeWidth={2}
+            style={{
+              cursor: "pointer",
+              transition: "opacity 0.2s"
+            }}
+            onMouseEnter={() => setHoveredIndex(index)}
+            onMouseLeave={() => setHoveredIndex(prev => (prev === index ? null : prev))}
+          />
         ))}
       </svg>
 
-      {hoveredSlice && tooltipPosition && (
+      {hoveredSlice && (
         <div
           className="pointer-events-none absolute z-30 min-w-[180px] rounded-lg border border-border bg-black/80 px-3 py-2.5 shadow-xl backdrop-blur sm:px-4 sm:py-3"
           style={{
-            left: `${(tooltipPosition.x / 300) * 100}%`,
-            top: `${(tooltipPosition.y / 300) * 100}%`,
+            left: `${(hoveredSlice.labelX / 300) * 100}%`,
+            top: `${(hoveredSlice.labelY / 300) * 100}%`,
             transform: "translate(-50%, -110%)"
           }}
           role="tooltip"
@@ -230,3 +144,4 @@ export const CategoryPieChart = (props: { data: CategoryTotal[] }) => {
   )
 }
 
+export const CategoryPieChart = memo(CategoryPieChartImpl)

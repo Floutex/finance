@@ -13,7 +13,6 @@ import { cn, getUserColorClasses } from "@/components/ui/utils"
 import {
   ArrowLeft,
   Check,
-  DollarSign,
   Loader2,
   Lock,
   Pencil,
