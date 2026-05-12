@@ -15,7 +15,7 @@ import { ScrollArea } from "@/components/v2/primitives/scroll-area"
 import { Separator } from "@/components/v2/primitives/separator"
 import { NavSection, type NavItem } from "@/components/v2/layout/nav-section"
 import { UserMenu } from "@/components/v2/layout/user-menu"
-import { ADMIN_USER } from "@/lib/constants"
+import { isAdminUser } from "@/lib/constants"
 
 const PRIMARY_NAV: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, exact: true },
@@ -40,7 +40,7 @@ type MobileSidebarProps = {
  * desktop Sidebar but always expanded, dismisses on navigation.
  */
 export function MobileSidebar({ user, onNavigate }: MobileSidebarProps) {
-  const isAdmin = user === ADMIN_USER
+  const isAdmin = isAdminUser(user)
 
   return (
     <div className="flex h-full flex-col text-sidebar-foreground">

@@ -22,8 +22,15 @@ export const USERS: UserConfig[] = [
 /** Members that can manage monthly income. */
 export const INCOME_USERS = ["Antônio", "Júlia"]
 
-/** Admin (audit log, categories management, invite link, participants). */
-export const ADMIN_USER = "Antônio"
+/** Admins (audit log, categories management, invite link, participants). */
+export const ADMIN_USERS = ["Antônio", "Júlia", "Pietro"] as const
+
+/** Convenience: is the given user name an admin? */
+export const isAdminUser = (name: string | null | undefined): boolean =>
+  !!name && (ADMIN_USERS as readonly string[]).includes(name)
+
+/** @deprecated Use ADMIN_USERS / isAdminUser. Kept temporarily to avoid breakage. */
+export const ADMIN_USER = ADMIN_USERS[0]
 
 /** sessionStorage key for the currently logged-in user. */
 export const SESSION_USER_KEY = "financas:user"

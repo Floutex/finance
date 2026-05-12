@@ -24,7 +24,7 @@ import {
 } from "@/components/v2/primitives/tooltip"
 import { NavSection, type NavItem } from "@/components/v2/layout/nav-section"
 import { UserMenu } from "@/components/v2/layout/user-menu"
-import { ADMIN_USER } from "@/lib/constants"
+import { isAdminUser } from "@/lib/constants"
 
 const PRIMARY_NAV: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, exact: true },
@@ -65,7 +65,7 @@ export function Sidebar({ user }: SidebarProps) {
     })
   }
 
-  const isAdmin = user === ADMIN_USER
+  const isAdmin = isAdminUser(user)
 
   return (
     <aside

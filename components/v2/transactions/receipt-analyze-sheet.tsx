@@ -5,12 +5,12 @@ import { Image as ImageIcon, Loader2, Save, Sparkles, Trash2, X } from "lucide-r
 
 import { cn } from "@/components/v2/primitives/utils"
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/v2/primitives/sheet"
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/v2/primitives/dialog"
 import { Button } from "@/components/v2/primitives/button"
 import { Input } from "@/components/v2/primitives/input"
 import { Label } from "@/components/v2/primitives/label"
@@ -24,7 +24,6 @@ import {
 import { Separator } from "@/components/v2/primitives/separator"
 import { useParticipants } from "@/hooks/use-participants"
 import { useCategories } from "@/hooks/use-categories"
-import { useIsDesktop } from "@/hooks/use-media-query"
 import { getSupabaseClient } from "@/lib/supabase"
 import { uploadReceipt } from "@/lib/storage"
 import type { TablesInsert, Tables } from "@/lib/database.types"
@@ -62,7 +61,6 @@ export function ReceiptAnalyzeSheet({
   currentUser,
   onSaved,
 }: ReceiptAnalyzeSheetProps) {
-  const isDesktop = useIsDesktop()
   const { active: participants, members } = useParticipants()
   const { categories } = useCategories()
 
@@ -221,22 +219,15 @@ export function ReceiptAnalyzeSheet({
   }
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side={isDesktop ? "right" : "bottom"}
-        className={
-          isDesktop
-            ? "flex w-full flex-col gap-0 p-0 sm:max-w-2xl"
-            : "flex h-[92vh] w-full flex-col gap-0 rounded-t-xl p-0"
-        }
-      >
-        <SheetHeader>
-          <SheetTitle>Analisar recibo</SheetTitle>
-          <SheetDescription>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="flex max-h-[90vh] w-full max-w-2xl flex-col gap-0 p-0">
+        <DialogHeader className="px-6 pt-6">
+          <DialogTitle>Analisar recibo</DialogTitle>
+          <DialogDescription>
             Faça upload de uma imagem (ou cole com Ctrl+V). A IA extrai as
             transações e você confirma antes de salvar.
-          </SheetDescription>
-        </SheetHeader>
+          </DialogDescription>
+        </DialogHeader>
 
         <div className="flex-1 overflow-y-auto p-6">
           {!preview ? (
@@ -409,8 +400,8 @@ export function ReceiptAnalyzeSheet({
             </Button>
           </div>
         )}
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   )
 }
 

@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import dynamic from "next/dynamic"
-import { Command, HandCoins, Plus, ScanLine } from "lucide-react"
+import { HandCoins, Plus, ScanLine } from "lucide-react"
 import { toast } from "sonner"
 import type { RowSelectionState } from "@tanstack/react-table"
 
@@ -12,7 +12,7 @@ import { useMonthlyIncomes } from "@/hooks/use-monthly-incomes"
 import { useSessionUser } from "@/hooks/use-session-user"
 import { useHotkeys } from "@/hooks/use-hotkeys"
 
-import { ADMIN_USER } from "@/lib/constants"
+import { isAdminUser } from "@/lib/constants"
 import {
   applyQuickRange,
   computeDashboardMetrics,
@@ -38,7 +38,6 @@ import {
 import { TransactionSheet } from "@/components/v2/transactions/transaction-sheet"
 import { TransactionRowActions } from "@/components/v2/transactions/transaction-row-actions"
 import { DeleteTransactionDialog } from "@/components/v2/transactions/delete-transaction-dialog"
-import { QuickAdd } from "@/components/v2/transactions/quick-add"
 import { BulkActionsBar } from "@/components/v2/transactions/bulk-actions-bar"
 import {
   BulkAdvancedEditDialog,
@@ -105,7 +104,7 @@ export default function TransactionsPage() {
   const [requestOpen, setRequestOpen] = React.useState(false)
 
   const memberNames = React.useMemo(() => members.map((m) => m.name), [members])
-  const isAdmin = user === ADMIN_USER
+  const isAdmin = isAdminUser(user)
 
   useHotkeys(
     React.useMemo(
@@ -368,13 +367,6 @@ export default function TransactionsPage() {
             <HandCoins />
             Solicitar
           </Button>
-          <Button variant="outline" onClick={() => triggerCmdK()}>
-            <Command />
-            <span>Quick-add</span>
-            <kbd className="hidden rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium md:inline-block">
-              ⌘K
-            </kbd>
-          </Button>
           <Button onClick={() => setSheetMode("create")}>
             <Plus />
             Nova
@@ -512,21 +504,7 @@ export default function TransactionsPage() {
         onSaved={handleReceiptSaved}
       />
 
-      {user && (
-        <QuickAdd
-          currentUser={user}
-          defaultParticipants={defaultParticipants}
-          onSubmit={handleCreate}
-        />
-      )}
-
       <Fab onClick={() => setSheetMode("create")} aria-label="Nova transação" />
     </div>
-  )
-}
-
-function triggerCmdK() {
-  window.dispatchEvent(
-    new KeyboardEvent("keydown", { key: "k", metaKey: true, ctrlKey: true })
   )
 }

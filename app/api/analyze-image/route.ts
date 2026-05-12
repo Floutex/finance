@@ -1,15 +1,10 @@
-import OpenAI from "openai"
 import { NextRequest, NextResponse } from "next/server"
+import { getOpenRouterClient, OPENROUTER_MODEL } from "@/lib/openrouter"
 
 export const runtime = "nodejs"
 
 export async function POST(request: NextRequest) {
   try {
-    const apiKey = process.env.OPENAI_API_KEY
-    if (!apiKey) {
-      return NextResponse.json({ error: "OPENAI_API_KEY não configurada" }, { status: 500 })
-    }
-
     const formData = await request.formData()
     const file = formData.get("image") as File | null
 
@@ -22,7 +17,7 @@ export async function POST(request: NextRequest) {
     const base64Image = buffer.toString("base64")
     const mimeType = file.type
 
-    const openai = new OpenAI({ apiKey })
+    const client = getOpenRouterClient()
 
     const prompt = `Analise esta imagem e extraia todas as transações financeiras presentes. Para cada transação, identifique:
 
@@ -41,8 +36,8 @@ Retorne APENAS um JSON válido no formato:
 
 Se houver múltiplas transações na imagem, retorne um array com todas elas. Se houver apenas uma transação, retorne um array com um único objeto.`
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+    const response = await client.chat.completions.create({
+      model: OPENROUTER_MODEL,
       messages: [
         {
           role: "user",
@@ -50,40 +45,40 @@ Se houver múltiplas transações na imagem, retorne um array com todas elas. Se
             {
               type: "image_url",
               image_url: {
-                url: `data:${mimeType};base64,${base64Image}`
-              }
+                url: `data:${mimeType};base64,${base64Image}`,
+              },
             },
             {
               type: "text",
-              text: prompt
-            }
-          ]
-        }
+              text: prompt,
+            },
+          ],
+        },
       ],
-      max_tokens: 2000
+      max_tokens: 2000,
     })
 
     const text = response.choices[0]?.message?.content
     if (!text) {
-      return NextResponse.json({ error: "Resposta vazia da OpenAI" }, { status: 500 })
+      return NextResponse.json({ error: "Resposta vazia da IA" }, { status: 500 })
     }
 
     let transactions
     try {
       const jsonMatch = text.match(/\[[\s\S]*\]/)
       if (!jsonMatch) {
-        throw new Error("Resposta da OpenAI não contém JSON válido")
+        throw new Error("Resposta da IA não contém JSON válido")
       }
       transactions = JSON.parse(jsonMatch[0])
-    } catch (parseError) {
+    } catch {
       return NextResponse.json(
-        { error: "Erro ao processar resposta da OpenAI", details: text },
+        { error: "Erro ao processar resposta da IA", details: text },
         { status: 500 }
       )
     }
 
     if (!Array.isArray(transactions)) {
-      return NextResponse.json({ error: "Resposta da OpenAI não é um array" }, { status: 500 })
+      return NextResponse.json({ error: "Resposta da IA não é um array" }, { status: 500 })
     }
 
     const validatedTransactions = transactions.map((t: any) => {
@@ -91,7 +86,10 @@ Se houver múltiplas transações na imagem, retorne um array com todas elas. Se
       return {
         description: String(t.description || "").trim(),
         date: String(t.date || today).trim(),
-        amount: typeof t.amount === "number" ? t.amount : parseFloat(String(t.amount || 0).replace(",", ".")) || 0
+        amount:
+          typeof t.amount === "number"
+            ? t.amount
+            : parseFloat(String(t.amount || 0).replace(",", ".")) || 0,
       }
     })
 
@@ -100,12 +98,11 @@ Se houver múltiplas transações na imagem, retorne um array com todas elas. Se
     console.error("Erro ao analisar imagem:", error)
     const errorMessage = error instanceof Error ? error.message : "Erro desconhecido"
     const errorStack = error instanceof Error ? error.stack : undefined
-    console.error("Detalhes do erro:", { errorMessage, errorStack, error })
     return NextResponse.json(
       {
         error: "Erro ao processar imagem",
         details: errorMessage,
-        stack: process.env.NODE_ENV === "development" ? errorStack : undefined
+        stack: process.env.NODE_ENV === "development" ? errorStack : undefined,
       },
       { status: 500 }
     )

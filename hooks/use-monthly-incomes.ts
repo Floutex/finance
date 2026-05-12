@@ -20,9 +20,15 @@ export function useMonthlyIncomes() {
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
-    const { data } = await getMonthlyIncomes()
-    if (data) setIncomes(data)
-    setLoading(false)
+    try {
+      const { data, error } = await getMonthlyIncomes()
+      if (error) throw error
+      if (data) setIncomes(data)
+    } catch (e) {
+      console.error("[use-monthly-incomes] load failed:", e)
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => {

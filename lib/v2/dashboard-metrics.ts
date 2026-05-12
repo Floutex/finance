@@ -6,7 +6,7 @@
 
 import { parseISO } from "date-fns"
 import type { Tables } from "@/lib/database.types"
-import { PENDING_MARKER, normalizeText, ADMIN_USER } from "@/lib/constants"
+import { PENDING_MARKER, normalizeText, isAdminUser } from "@/lib/constants"
 import { simplifyDebts, type Debt } from "@/lib/debt-simplification"
 import { buildIncomeMap, calculateShares } from "@/lib/proportional-split"
 
@@ -90,7 +90,7 @@ export function computeDashboardMetrics(args: {
   const { start, end } = args.filters ?? {}
 
   // ── Visibility (mirrors legacy rules) ──
-  const isAdmin = currentUser === ADMIN_USER
+  const isAdmin = isAdminUser(currentUser)
   const pendingRequests: Transaction[] = []
   const userTransactions: Transaction[] = []
   for (const t of transactions) {

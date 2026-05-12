@@ -7,6 +7,8 @@ import { Sidebar } from "@/components/v2/layout/sidebar"
 import { MobileTopbar } from "@/components/v2/layout/mobile-topbar"
 import { OfflineBanner } from "@/components/v2/layout/offline-banner"
 import { ShortcutsCheatsheet } from "@/components/v2/layout/shortcuts-cheatsheet"
+import { QuickAddBubble } from "@/components/v2/ai/quick-add-bubble"
+import { useParticipants } from "@/hooks/use-participants"
 import { SESSION_USER_KEY, USERS } from "@/lib/constants"
 
 /**
@@ -61,6 +63,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
       <ShortcutsCheatsheet />
+      <QuickAddBubbleMount user={user} />
     </div>
+  )
+}
+
+function QuickAddBubbleMount({ user }: { user: string }) {
+  const { members, active } = useParticipants()
+  return (
+    <QuickAddBubble
+      currentUser={user}
+      members={members.map((m) => m.name)}
+      participants={active.map((p) => p.name)}
+    />
   )
 }

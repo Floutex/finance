@@ -80,12 +80,12 @@ export function IncomeManager() {
       </header>
 
       {loading ? (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="flex flex-col gap-4">
           <Skeleton className="h-72 rounded-xl" />
           <Skeleton className="h-72 rounded-xl" />
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="flex flex-col gap-4">
           {PEOPLE.map((person) => (
             <PersonIncomeCard
               key={person}
