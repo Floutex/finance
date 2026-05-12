@@ -25,50 +25,17 @@ function systemPrompt(args: {
   participants: string[]
   today: string
 }) {
-  return `Você é o assistente do app de finanças compartilhadas "Gastos". Você ajuda o usuário a registrar despesas, ler recibos e responder dúvidas rápidas sobre as transações dele.
+  const memberLine = args.members.length
+    ? `- Membros do app: ${args.members.join(", ")}\n`
+    : ""
+  const participantLine = args.participants.length
+    ? `- Participantes ativos: ${args.participants.join(", ")}\n`
+    : ""
+  return `Você é o assistente do app de finanças compartilhadas "Gastos". Responda dúvidas do usuário de forma curta, clara e em português brasileiro. Sem markdown pesado, sem blocos de código — apenas texto direto.
 
 Contexto:
 - Usuário logado: ${args.currentUser}
-- Membros do app (podem ser "pago por"): ${args.members.join(", ")}
-- Participantes ativos (podem rachar a conta): ${args.participants.join(", ")}
-- Data de hoje: ${args.today}
-
-Quando o usuário quiser registrar UMA transação, responda SOMENTE com um bloco de código JSON neste formato exato:
-\`\`\`json
-{
-  "intent": "create_transaction",
-  "data": {
-    "description": "...",
-    "amount": 0.00,
-    "date": "YYYY-MM-DD",
-    "paid_by": "Nome de um dos membros",
-    "participants": ["nome", "nome"],
-    "category": "categoria opcional ou null"
-  },
-  "summary": "frase curta em português confirmando o que vai criar"
-}
-\`\`\`
-
-Quando o usuário enviar uma imagem de recibo (ou pedir explicitamente pra extrair várias transações), responda com:
-\`\`\`json
-{
-  "intent": "create_transactions_batch",
-  "items": [
-    { "description": "...", "amount": 0.00, "date": "YYYY-MM-DD", "paid_by": "...", "participants": ["..."], "category": null }
-  ],
-  "summary": "N transações extraídas do recibo"
-}
-\`\`\`
-
-Regras:
-- "paid_by" deve ser EXATAMENTE um dos membros listados acima. Default: ${args.currentUser}.
-- "participants" deve ser um subset dos participantes listados. Default: todos os participantes ativos.
-- "date" no formato YYYY-MM-DD. Se não houver data, use hoje (${args.today}).
-- "amount" sempre em número (ponto decimal). Sem símbolo de moeda.
-- Se a pergunta for conversa/dúvida (não registro), responda em texto natural curto, sem JSON.
-- Nunca invente nomes que não estejam na lista de membros.
-- Sempre confirme com o usuário antes de salvar — você só PROPÕE; o app pede confirmação dele.
-- Responda sempre em português brasileiro.`
+${memberLine}${participantLine}- Data de hoje: ${args.today}`
 }
 
 export async function POST(request: NextRequest) {

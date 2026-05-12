@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import {
+  Command,
   HandCoins,
   Plus,
   Receipt,
@@ -49,6 +50,7 @@ import {
 import { TransactionSheet } from "@/components/v2/transactions/transaction-sheet"
 import { TransactionRowActions } from "@/components/v2/transactions/transaction-row-actions"
 import { DeleteTransactionDialog } from "@/components/v2/transactions/delete-transaction-dialog"
+import { QuickAdd } from "@/components/v2/transactions/quick-add"
 import { BulkActionsBar } from "@/components/v2/transactions/bulk-actions-bar"
 import {
   BulkAdvancedEditDialog,
@@ -419,6 +421,13 @@ export default function DashboardPage() {
             <HandCoins />
             Solicitar
           </Button>
+          <Button variant="outline" onClick={() => triggerCmdK()}>
+            <Command />
+            <span>Quick-add</span>
+            <kbd className="hidden rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium md:inline-block">
+              ⌘K
+            </kbd>
+          </Button>
           <Button onClick={() => setSheetMode("create")}>
             <Plus />
             Nova transação
@@ -708,9 +717,23 @@ export default function DashboardPage() {
         onSaved={handleReceiptSaved}
       />
 
+      {/* Cmd+K palette — IA Q&A */}
+      {user && (
+        <QuickAdd
+          currentUser={user}
+          defaultParticipants={defaultParticipants}
+        />
+      )}
+
       {/* Mobile floating action button */}
       <Fab onClick={() => setSheetMode("create")} aria-label="Nova transação" />
     </div>
+  )
+}
+
+function triggerCmdK() {
+  window.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "k", metaKey: true, ctrlKey: true })
   )
 }
 
