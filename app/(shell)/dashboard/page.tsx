@@ -85,6 +85,24 @@ function getGreeting() {
   return "Boa noite"
 }
 
+/**
+ * Count the number of days in the effective period (inclusive). Falls back to
+ * the full transaction range when no filter is set. Returns at least 1 if
+ * there is any data, to avoid divide-by-zero in averages.
+ */
+function daysInPeriod(
+  filters: { start?: string; end?: string },
+  fullRange: { min: string; max: string }
+): number {
+  const start = filters.start || fullRange.min
+  const end = filters.end || fullRange.max
+  if (!start || !end) return 0
+  const s = new Date(start).getTime()
+  const e = new Date(end).getTime()
+  if (Number.isNaN(s) || Number.isNaN(e) || e < s) return 0
+  return Math.max(1, Math.floor((e - s) / 86_400_000) + 1)
+}
+
 const EMPTY_TOOLBAR: TransactionsToolbarValue = {
   search: "",
   start: "",
@@ -183,7 +201,16 @@ export default function DashboardPage() {
     })
   }, [user, transactions, incomes, memberNames, effectiveFilters])
 
-  const isLoading = !user || txLoading || pLoading || incLoading || !metrics
+  // Show the full skeleton only on the FIRST load. Once we've rendered real
+  // content once, subsequent background refetches (bulk delete, edit, etc.)
+  // keep the page interactive instead of flickering back to the skeleton.
+  const hasRenderedOnceRef = React.useRef(false)
+  if (!hasRenderedOnceRef.current && metrics && user) {
+    hasRenderedOnceRef.current = true
+  }
+  const isLoading =
+    !hasRenderedOnceRef.current &&
+    (!user || txLoading || pLoading || incLoading || !metrics)
 
   // ── Selection helpers ─────────────────────────────────────────────────────
   const selectedIds = React.useMemo(
@@ -466,60 +493,43 @@ export default function DashboardPage() {
               label="Top categoria"
               icon={<Tag />}
               hint={
-                metrics!.topCategory && metrics!.periodStats.totalSpend > 0 ? (
-                  <span className="flex items-center gap-1.5">
-                    <span className="tabular-nums">
-                      {Math.round(
-                        (metrics!.topCategory.total /
-                          metrics!.periodStats.totalSpend) *
-                          100
-                      )}
-                      %
-                    </span>
-                    <span>do total do grupo</span>
-                  </span>
-                ) : (
-                  "Sem dados no período"
-                )
+                metrics!.topCategory && metrics!.periodStats.totalSpend > 0
+                  ? `${new Intl.NumberFormat("pt-BR", {
+                      style: "currency",
+                      currency: "BRL",
+                    }).format(metrics!.topCategory.total)} · ${Math.round(
+                      (metrics!.topCategory.total /
+                        metrics!.periodStats.totalSpend) *
+                        100
+                    )}% do total`
+                  : "Sem dados no período"
               }
             >
-              {metrics!.topCategory ? (
-                <div className="flex w-full min-w-0 flex-col gap-0.5">
-                  <span className="truncate font-display text-2xl font-semibold">
-                    {metrics!.topCategory.category}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    <span className="tabular-nums">
-                      {new Intl.NumberFormat("pt-BR", {
-                        style: "currency",
-                        currency: "BRL",
-                      }).format(metrics!.topCategory.total)}
-                    </span>
-                  </span>
-                </div>
-              ) : (
-                <span className="font-display text-3xl font-semibold text-muted-foreground">
-                  —
-                </span>
-              )}
-            </MetricCard>
-            <MetricCard
-              label="Pendentes"
-              icon={<Receipt />}
-              hint={
-                metrics!.pendingRequests.length === 0
-                  ? "Nenhuma cobrança em aberto"
-                  : "Cobranças aguardando pagamento"
-              }
-            >
-              <span className="font-display text-3xl font-semibold">
-                {metrics!.pendingRequests.length}
+              <span
+                className="truncate font-display text-3xl font-semibold"
+                title={metrics!.topCategory?.category}
+              >
+                {metrics!.topCategory?.category ?? "—"}
               </span>
             </MetricCard>
+            <MetricCard
+              label="Média diária"
+              icon={<Receipt />}
+              value={(() => {
+                const days = daysInPeriod(effectiveFilters, fullDateRange)
+                return days > 0 ? metrics!.periodStats.totalSpend / days : 0
+              })()}
+              hint={(() => {
+                const days = daysInPeriod(effectiveFilters, fullDateRange)
+                return days > 0
+                  ? `Em ${days} ${days === 1 ? "dia" : "dias"} do período`
+                  : "Sem período definido"
+              })()}
+            />
           </section>
 
           <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <LazyMount minHeight={336}>
+            <LazyMount minHeight={300}>
               <CategoryPieChart
                 title="Você por categoria"
                 description="Gastos pagos por você no período"
@@ -541,7 +551,7 @@ export default function DashboardPage() {
                 }
               />
             </LazyMount>
-            <LazyMount minHeight={336}>
+            <LazyMount minHeight={300}>
               <CategoryPieChart
                 title="Grupo por categoria"
                 description="Todas as transações em que você está envolvido"

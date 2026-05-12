@@ -51,14 +51,39 @@ export function CategoryPieChart({
 
   const { slices, total } = React.useMemo(() => {
     if (sourceData.length === 0) return { slices: [], total: 0 }
-    const sorted = [...sourceData].sort((a, b) => b.total - a.total)
+
+    // Coalesce duplicates and case-variants of "Outros" / "Sem categoria"
+    // so the user's literal "Outros" category never collides with the
+    // synthetic bucket we add when there are more slices than maxSlices.
+    const isOthers = (c: string) => {
+      const k = c.trim().toLowerCase()
+      return k === "outros" || k === "outro" || k === "outras"
+    }
+
+    const merged = new Map<string, number>()
+    let existingOthers = 0
+    for (const item of sourceData) {
+      if (isOthers(item.category)) {
+        existingOthers += item.total
+      } else {
+        merged.set(item.category, (merged.get(item.category) ?? 0) + item.total)
+      }
+    }
+    const sorted = Array.from(merged.entries())
+      .map(([category, total]) => ({ category, total }))
+      .sort((a, b) => b.total - a.total)
+
     let slices: CategoryTotal[]
-    if (sorted.length <= maxSlices) {
+    if (sorted.length <= maxSlices - (existingOthers > 0 ? 1 : 0)) {
       slices = sorted
+      if (existingOthers > 0) {
+        slices.push({ category: "Outros", total: existingOthers })
+      }
     } else {
       const top = sorted.slice(0, maxSlices - 1)
       const rest = sorted.slice(maxSlices - 1)
-      const restTotal = rest.reduce((s, x) => s + x.total, 0)
+      const restTotal =
+        rest.reduce((s, x) => s + x.total, 0) + existingOthers
       slices = [...top, { category: "Outros", total: restTotal }]
     }
     const total = slices.reduce((s, x) => s + x.total, 0)
@@ -109,12 +134,12 @@ export function CategoryPieChart({
       </header>
 
       {total === 0 ? (
-        <div className="flex h-48 items-center justify-center rounded-md border border-dashed border-border text-xs text-muted-foreground">
+        <div className="flex h-44 items-center justify-center rounded-md border border-dashed border-border text-xs text-muted-foreground">
           {isDrilling ? "Sem transações nessa categoria" : "Sem dados no período"}
         </div>
       ) : (
-        <div className="grid grid-cols-[160px_1fr] items-center gap-6">
-          <div className="relative h-40 w-40">
+        <div className="grid grid-cols-[176px_1fr] items-center gap-5">
+          <div className="relative h-44 w-44">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -123,8 +148,8 @@ export function CategoryPieChart({
                   nameKey="category"
                   cx="50%"
                   cy="50%"
-                  innerRadius={48}
-                  outerRadius={72}
+                  innerRadius={54}
+                  outerRadius={84}
                   paddingAngle={2}
                   strokeWidth={0}
                   isAnimationActive={false}

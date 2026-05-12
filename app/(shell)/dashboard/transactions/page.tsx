@@ -163,7 +163,14 @@ export default function TransactionsPage() {
     })
   }, [user, transactions, incomes, memberNames, effectiveFilters])
 
-  const isLoading = !user || txLoading || pLoading || incLoading || !metrics
+  // Show the skeleton only on the first load; later refetches keep content visible.
+  const hasRenderedOnceRef = React.useRef(false)
+  if (!hasRenderedOnceRef.current && metrics && user) {
+    hasRenderedOnceRef.current = true
+  }
+  const isLoading =
+    !hasRenderedOnceRef.current &&
+    (!user || txLoading || pLoading || incLoading || !metrics)
 
   const selectedIds = React.useMemo(
     () => Object.keys(rowSelection).filter((id) => rowSelection[id]),

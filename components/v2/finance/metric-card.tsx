@@ -36,7 +36,9 @@ export function MetricCard({
   return (
     <div
       className={cn(
-        "surface-1 flex flex-col gap-3 rounded-xl p-5",
+        // h-full + the parent grid's items-stretch keeps every card at the
+        // same height regardless of content length.
+        "surface-1 flex h-full flex-col gap-3 rounded-xl p-5",
         className
       )}
     >
@@ -48,7 +50,7 @@ export function MetricCard({
           <span className="text-muted-foreground [&>svg]:size-4">{icon}</span>
         )}
       </div>
-      <div className="flex items-baseline gap-2">
+      <div className="flex min-h-[2.25rem] items-baseline gap-2">
         {children ?? (
           typeof value === "number" ? (
             <Currency value={value} display signed={signed} />
@@ -60,7 +62,7 @@ export function MetricCard({
       {hint && (
         <div
           className={cn(
-            "text-xs",
+            "mt-auto text-xs",
             trend === "up" && "text-success",
             trend === "down" && "text-destructive",
             (!trend || trend === "neutral") && "text-muted-foreground"
