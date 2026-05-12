@@ -32,11 +32,11 @@ export function BulkActionsBar({
   return (
     <div
       className={cn(
-        "pointer-events-none fixed inset-x-0 bottom-6 z-30 flex justify-center px-4",
+        "pointer-events-none fixed inset-x-0 bottom-6 z-30 flex justify-center px-4 [padding-bottom:env(safe-area-inset-bottom)] md:bottom-6",
         className
       )}
     >
-      <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-border bg-popover px-3 py-1.5 text-sm shadow-2xl">
+      <div className="pointer-events-auto flex max-w-full items-center gap-1 overflow-x-auto rounded-full border border-border bg-popover px-2 py-1.5 text-sm shadow-2xl md:gap-2 md:px-3">
         <span className="flex items-center gap-2 pl-1 pr-2">
           <CheckSquare className="size-4 text-primary" />
           <span className="tabular-nums">

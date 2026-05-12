@@ -4,6 +4,9 @@ import * as React from "react"
 import { useRouter } from "next/navigation"
 
 import { Sidebar } from "@/components/v2/layout/sidebar"
+import { MobileTopbar } from "@/components/v2/layout/mobile-topbar"
+import { OfflineBanner } from "@/components/v2/layout/offline-banner"
+import { ShortcutsCheatsheet } from "@/components/v2/layout/shortcuts-cheatsheet"
 import { SESSION_USER_KEY, USERS } from "@/lib/constants"
 
 /**
@@ -43,8 +46,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen bg-background">
+      <a
+        href="#v2-main"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50 focus:rounded focus:bg-primary focus:px-3 focus:py-1.5 focus:text-sm focus:text-primary-foreground"
+      >
+        Pular para o conteúdo
+      </a>
       <Sidebar user={user} />
-      <main className="min-w-0 flex-1">{children}</main>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <OfflineBanner />
+        <MobileTopbar user={user} />
+        <main id="v2-main" className="min-w-0 flex-1">
+          {children}
+        </main>
+      </div>
+      <ShortcutsCheatsheet />
     </div>
   )
 }

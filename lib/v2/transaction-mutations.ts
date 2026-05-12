@@ -145,6 +145,40 @@ export async function bulkUpdate(
   if (error) throw new Error(error.message)
 }
 
+export type CreatePendingRequestPayload = {
+  description: string
+  amount: number
+  date: string
+  pix?: string
+  currentUser: string
+}
+
+export async function createPendingRequest(
+  p: CreatePendingRequestPayload
+): Promise<Transaction> {
+  const supabase = getSupabaseClient()
+  const fullDescription = p.pix
+    ? `💰 ${p.description} | PIX: ${p.pix}`
+    : `💰 ${p.description}`
+  const insert: TablesInsert<"shared_transactions"> = {
+    description: fullDescription,
+    category: "Solicitação",
+    paid_by: PENDING_MARKER,
+    date: p.date,
+    amount: p.amount,
+    participants: [p.currentUser],
+    last_edited_by: p.currentUser,
+    last_edited_at: nowIso(),
+  }
+  const { data, error } = await supabase
+    .from("shared_transactions")
+    .insert(insert)
+    .select("*")
+    .single()
+  if (error) throw new Error(error.message)
+  return data!
+}
+
 export async function markRequestPaid(
   transactionId: string,
   currentUser: string

@@ -59,7 +59,7 @@ export function TransactionsToolbar({
   const hasFilter = value.search || value.start || value.end || value.activeRange
 
   return (
-    <div className={cn("flex flex-wrap items-center gap-2", className)}>
+    <div className={cn("hidden flex-wrap items-center gap-2 md:flex", className)}>
       <div className="relative w-full max-w-xs">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input

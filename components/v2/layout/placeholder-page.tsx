@@ -19,7 +19,7 @@ export function PlaceholderPage({
   phase = "Em construção",
 }: PlaceholderPageProps) {
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col items-start gap-8 px-8 py-16">
+    <div className="mx-auto flex w-full max-w-3xl flex-col items-start gap-6 px-4 py-10 md:gap-8 md:px-8 md:py-16">
       <header className="space-y-2">
         {eyebrow && (
           <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">

@@ -3,6 +3,7 @@
 import * as React from "react"
 import {
   Command,
+  HandCoins,
   Plus,
   Receipt,
   ScanLine,
@@ -26,10 +27,13 @@ import {
 import {
   bulkSoftDelete,
   bulkUpdate,
+  createPendingRequest,
   createTransaction,
+  markRequestPaid,
   softDeleteTransaction,
   updateTransaction,
   type CreatePayload,
+  type CreatePendingRequestPayload,
 } from "@/lib/v2/transaction-mutations"
 
 import { Button } from "@/components/v2/primitives/button"
@@ -38,6 +42,7 @@ import { MetricCard } from "@/components/v2/finance/metric-card"
 import { BalanceCard } from "@/components/v2/finance/balance-card"
 import { BalanceChart } from "@/components/v2/charts/balance-chart"
 import { CategoryPieChart } from "@/components/v2/charts/category-pie-chart"
+import { LazyMount } from "@/components/v2/charts/lazy-mount"
 import { TransactionsTable } from "@/components/v2/transactions/transactions-table"
 import {
   TransactionsToolbar,
@@ -52,7 +57,24 @@ import {
   BulkAdvancedEditDialog,
   BulkQuickEditDialog,
 } from "@/components/v2/transactions/bulk-edit-dialogs"
-import { ReceiptAnalyzeSheet } from "@/components/v2/transactions/receipt-analyze-sheet"
+import dynamic from "next/dynamic"
+
+const ReceiptAnalyzeSheet = dynamic(
+  () =>
+    import("@/components/v2/transactions/receipt-analyze-sheet").then(
+      (m) => m.ReceiptAnalyzeSheet
+    ),
+  { ssr: false }
+)
+import { PendingRequests } from "@/components/v2/transactions/pending-requests"
+import {
+  RequestDialog,
+  type RequestPayload,
+} from "@/components/v2/transactions/request-dialog"
+import { MobileTransactionsList } from "@/components/v2/transactions/mobile-transactions-list"
+import { MobileFiltersSheet } from "@/components/v2/transactions/mobile-filters-sheet"
+import { Fab } from "@/components/v2/layout/fab"
+import { useHotkeys } from "@/hooks/use-hotkeys"
 import type { Tables } from "@/lib/database.types"
 
 type Transaction = Tables<"shared_transactions">
@@ -98,9 +120,40 @@ export default function DashboardPage() {
   const [bulkAdvancedOpen, setBulkAdvancedOpen] = React.useState(false)
   const [bulkPending, setBulkPending] = React.useState(false)
   const [receiptOpen, setReceiptOpen] = React.useState(false)
+  const [requestOpen, setRequestOpen] = React.useState(false)
+  const [markingPaidIds, setMarkingPaidIds] = React.useState<Set<string>>(
+    () => new Set()
+  )
 
   const memberNames = React.useMemo(() => members.map((m) => m.name), [members])
   const isAdmin = user === ADMIN_USER
+
+  useHotkeys(
+    React.useMemo(
+      () => [
+        {
+          key: "n",
+          handler: (e) => {
+            e.preventDefault()
+            setSheetMode("create")
+          },
+        },
+        {
+          key: "/",
+          handler: (e) => {
+            const el = document.querySelector<HTMLInputElement>(
+              'input[placeholder^="Buscar"]'
+            )
+            if (el) {
+              e.preventDefault()
+              el.focus()
+            }
+          },
+        },
+      ],
+      []
+    )
+  )
 
   const fullDateRange = React.useMemo(() => {
     if (transactions.length === 0) return { min: "", max: "" }
@@ -281,6 +334,46 @@ export default function DashboardPage() {
     }
   }
 
+  const handleCreateRequest = async (payload: RequestPayload) => {
+    if (!user) return
+    try {
+      const created = await createPendingRequest({
+        ...payload,
+        currentUser: user,
+      } as CreatePendingRequestPayload)
+      updateCache((prev) => [created, ...prev])
+      toast.success("Solicitação enviada.")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao enviar solicitação.")
+    }
+  }
+
+  const handleMarkPaid = async (transaction: Transaction) => {
+    if (!user) return
+    setMarkingPaidIds((prev) => {
+      const next = new Set(prev)
+      next.add(transaction.id)
+      return next
+    })
+    try {
+      const updated = await markRequestPaid(transaction.id, user)
+      updateCache((prev) =>
+        prev.map((t) => (t.id === transaction.id ? updated : t))
+      )
+      toast.success("Cobrança marcada como paga.")
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "Falha ao marcar como pago."
+      )
+    } finally {
+      setMarkingPaidIds((prev) => {
+        const next = new Set(prev)
+        next.delete(transaction.id)
+        return next
+      })
+    }
+  }
+
   const handleReceiptSaved = (created: Transaction[]) => {
     updateCache((prev) => [...created, ...prev])
     toast.success(
@@ -309,7 +402,7 @@ export default function DashboardPage() {
   )
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-8 py-8">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 md:gap-8 md:px-8 md:py-8">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-1">
           <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -320,10 +413,14 @@ export default function DashboardPage() {
             {user ? `, ${user}` : ""}
           </h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="hidden items-center gap-2 md:flex">
           <Button variant="outline" onClick={() => setReceiptOpen(true)}>
             <ScanLine />
             Analisar recibo
+          </Button>
+          <Button variant="outline" onClick={() => setRequestOpen(true)}>
+            <HandCoins />
+            Solicitar
           </Button>
           <Button variant="outline" onClick={() => triggerCmdK()}>
             <Command />
@@ -350,7 +447,7 @@ export default function DashboardPage() {
             participants={participants}
           />
 
-          <section className="grid grid-cols-1 gap-4 md:grid-cols-4">
+          <section className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:grid-cols-4 md:gap-4 md:overflow-visible md:px-0 md:pb-0 [&>*]:min-w-[78%] [&>*]:snap-start md:[&>*]:min-w-0">
             <MetricCard
               label="Gastos no período"
               value={metrics!.periodStats.totalSpend}
@@ -409,17 +506,29 @@ export default function DashboardPage() {
           </section>
 
           <section className="grid grid-cols-1 gap-4 lg:grid-cols-[1.6fr_1fr]">
-            <BalanceChart
-              series={metrics!.chartSeries}
-              startDate={effectiveFilters.start}
-              endDate={effectiveFilters.end}
-            />
-            <CategoryPieChart
-              title="Você por categoria"
-              description="Gastos pagos por você no período"
-              data={metrics!.categoryTotals}
-            />
+            <LazyMount minHeight={336}>
+              <BalanceChart
+                series={metrics!.chartSeries}
+                startDate={effectiveFilters.start}
+                endDate={effectiveFilters.end}
+              />
+            </LazyMount>
+            <LazyMount minHeight={336}>
+              <CategoryPieChart
+                title="Você por categoria"
+                description="Gastos pagos por você no período"
+                data={metrics!.categoryTotals}
+              />
+            </LazyMount>
           </section>
+
+          <PendingRequests
+            requests={metrics!.pendingRequests}
+            participants={participants}
+            markingPaidIds={markingPaidIds}
+            onMarkPaid={handleMarkPaid}
+            onCreate={() => setRequestOpen(true)}
+          />
 
           <section className="flex flex-col gap-3">
             <div className="flex flex-wrap items-end justify-between gap-3">
@@ -430,19 +539,41 @@ export default function DashboardPage() {
                 </p>
               </div>
             </div>
-            <TransactionsToolbar
-              value={toolbar}
-              onChange={setToolbar}
-              disabledQuickRange={!fullDateRange.max}
-            />
-            <TransactionsTable
-              transactions={metrics!.filteredTransactions}
-              participants={participants}
-              enableSelection
-              rowSelection={rowSelection}
-              onRowSelectionChange={setRowSelection}
-              rowActions={rowActionsRenderer}
-            />
+            <div className="flex items-center justify-between gap-2">
+              <TransactionsToolbar
+                value={toolbar}
+                onChange={setToolbar}
+                disabledQuickRange={!fullDateRange.max}
+                className="flex-1"
+              />
+              <MobileFiltersSheet value={toolbar} onChange={setToolbar} />
+            </div>
+            <div className="hidden md:block">
+              <TransactionsTable
+                transactions={metrics!.filteredTransactions}
+                participants={participants}
+                enableSelection
+                rowSelection={rowSelection}
+                onRowSelectionChange={setRowSelection}
+                rowActions={rowActionsRenderer}
+              />
+            </div>
+            <div className="md:hidden">
+              <MobileTransactionsList
+                transactions={metrics!.filteredTransactions}
+                participants={participants}
+                selection={rowSelection as Record<string, boolean>}
+                onToggleSelect={(id, next) =>
+                  setRowSelection((prev) => {
+                    const out = { ...prev }
+                    if (next) out[id] = true
+                    else delete out[id]
+                    return out
+                  })
+                }
+                onRowClick={(t) => setSheetMode({ kind: "edit", transaction: t })}
+              />
+            </div>
           </section>
         </>
       )}
@@ -521,6 +652,13 @@ export default function DashboardPage() {
         onConfirm={handleBulkAdvancedEdit}
       />
 
+      {/* Request payment dialog */}
+      <RequestDialog
+        open={requestOpen}
+        onOpenChange={setRequestOpen}
+        onSubmit={handleCreateRequest}
+      />
+
       {/* Receipt OCR sheet */}
       <ReceiptAnalyzeSheet
         open={receiptOpen}
@@ -537,6 +675,9 @@ export default function DashboardPage() {
           onSubmit={handleCreate}
         />
       )}
+
+      {/* Mobile floating action button */}
+      <Fab onClick={() => setSheetMode("create")} aria-label="Nova transação" />
     </div>
   )
 }

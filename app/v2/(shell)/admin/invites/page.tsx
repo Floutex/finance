@@ -1,12 +1,5 @@
-import { PlaceholderPage } from "@/components/v2/layout/placeholder-page"
+import { InviteGenerator } from "@/components/v2/admin/invite-generator"
 
 export default function AdminInvitesPage() {
-  return (
-    <PlaceholderPage
-      eyebrow="Admin · Convites"
-      title="Convites"
-      description="Geração e revogação de magic links de acesso para convidados."
-      phase="Fase 4"
-    />
-  )
+  return <InviteGenerator />
 }

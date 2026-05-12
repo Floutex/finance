@@ -15,6 +15,7 @@ import {
   type TransactionFormValues,
   type TransactionFormSubmit,
 } from "@/components/v2/transactions/transaction-form"
+import { useIsDesktop } from "@/hooks/use-media-query"
 import type { Tables } from "@/lib/database.types"
 
 type Transaction = Tables<"shared_transactions">
@@ -39,6 +40,7 @@ export function TransactionSheet({
   createDefaults,
   onSubmit,
 }: TransactionSheetProps) {
+  const isDesktop = useIsDesktop()
   const initial = React.useMemo<TransactionFormValues>(() => {
     if (mode === "create") {
       return {
@@ -67,7 +69,14 @@ export function TransactionSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-xl">
+      <SheetContent
+        side={isDesktop ? "right" : "bottom"}
+        className={
+          isDesktop
+            ? "flex w-full flex-col gap-0 p-0 sm:max-w-xl"
+            : "flex h-[92vh] w-full flex-col gap-0 rounded-t-xl p-0"
+        }
+      >
         <SheetHeader>
           <SheetTitle>
             {isEdit ? "Editar transação" : "Nova transação"}

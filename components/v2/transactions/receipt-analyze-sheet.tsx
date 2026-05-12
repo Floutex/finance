@@ -24,6 +24,7 @@ import {
 import { Separator } from "@/components/v2/primitives/separator"
 import { useParticipants } from "@/hooks/use-participants"
 import { useCategories } from "@/hooks/use-categories"
+import { useIsDesktop } from "@/hooks/use-media-query"
 import { getSupabaseClient } from "@/lib/supabase"
 import { uploadReceipt } from "@/lib/storage"
 import type { TablesInsert, Tables } from "@/lib/database.types"
@@ -61,6 +62,7 @@ export function ReceiptAnalyzeSheet({
   currentUser,
   onSaved,
 }: ReceiptAnalyzeSheetProps) {
+  const isDesktop = useIsDesktop()
   const { active: participants, members } = useParticipants()
   const { categories } = useCategories()
 
@@ -220,7 +222,14 @@ export function ReceiptAnalyzeSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-2xl">
+      <SheetContent
+        side={isDesktop ? "right" : "bottom"}
+        className={
+          isDesktop
+            ? "flex w-full flex-col gap-0 p-0 sm:max-w-2xl"
+            : "flex h-[92vh] w-full flex-col gap-0 rounded-t-xl p-0"
+        }
+      >
         <SheetHeader>
           <SheetTitle>Analisar recibo</SheetTitle>
           <SheetDescription>

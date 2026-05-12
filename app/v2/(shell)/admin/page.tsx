@@ -32,7 +32,7 @@ const SECTIONS = [
 
 export default function AdminOverviewPage() {
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-8 py-12">
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-8 md:gap-8 md:px-8 md:py-12">
       <header className="space-y-2">
         <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
           Admin

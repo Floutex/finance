@@ -1,12 +1,10 @@
-import { PlaceholderPage } from "@/components/v2/layout/placeholder-page"
+"use client"
+
+import { CategoriesManager } from "@/components/v2/admin/categories-manager"
+import { useSessionUser } from "@/hooks/use-session-user"
 
 export default function AdminCategoriesPage() {
-  return (
-    <PlaceholderPage
-      eyebrow="Admin · Categorias"
-      title="Categorias"
-      description="CRUD de categorias com tabela e dialogs de criar/renomear."
-      phase="Fase 4"
-    />
-  )
+  const user = useSessionUser()
+  if (!user) return null
+  return <CategoriesManager actor={user} />
 }
