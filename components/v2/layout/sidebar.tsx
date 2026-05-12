@@ -9,7 +9,6 @@ import {
   Tag,
   Users,
   ScrollText,
-  Send,
   PanelLeftClose,
   PanelLeft,
 } from "lucide-react"
@@ -37,7 +36,6 @@ const ADMIN_NAV: NavItem[] = [
   { label: "Categorias", href: "/admin/categories", icon: Tag },
   { label: "Participantes", href: "/admin/participants", icon: Users },
   { label: "Audit", href: "/admin/audit", icon: ScrollText },
-  { label: "Convites", href: "/admin/invites", icon: Send },
 ]
 
 const STORAGE_KEY = "v2:sidebar-collapsed"

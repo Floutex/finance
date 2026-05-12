@@ -7,8 +7,7 @@ import {
   Plus,
   Receipt,
   ScanLine,
-  TrendingDown,
-  TrendingUp,
+  Tag,
   Wallet,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -440,12 +439,7 @@ export default function DashboardPage() {
         <DashboardSkeleton />
       ) : (
         <>
-          <BalanceCard
-            currentUser={user!}
-            totalBalance={metrics!.totalBalance}
-            myDebts={metrics!.myDebts}
-            participants={participants}
-          />
+          <BalanceCard totalBalance={metrics!.totalBalance} />
 
           <section className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:grid-cols-4 md:gap-4 md:overflow-visible md:px-0 md:pb-0 [&>*]:min-w-[78%] [&>*]:snap-start md:[&>*]:min-w-0">
             <MetricCard
@@ -469,27 +463,46 @@ export default function DashboardPage() {
               }
             />
             <MetricCard
-              label="Saldo líquido"
-              value={metrics!.totalBalance}
-              signed
-              icon={
-                metrics!.totalBalance >= 0 ? <TrendingUp /> : <TrendingDown />
-              }
+              label="Top categoria"
+              icon={<Tag />}
               hint={
-                metrics!.totalBalance > 0
-                  ? "A receber"
-                  : metrics!.totalBalance < 0
-                  ? "A pagar"
-                  : "Quitado"
+                metrics!.topCategory && metrics!.periodStats.totalSpend > 0 ? (
+                  <span className="flex items-center gap-1.5">
+                    <span className="tabular-nums">
+                      {Math.round(
+                        (metrics!.topCategory.total /
+                          metrics!.periodStats.totalSpend) *
+                          100
+                      )}
+                      %
+                    </span>
+                    <span>do total do grupo</span>
+                  </span>
+                ) : (
+                  "Sem dados no período"
+                )
               }
-              trend={
-                metrics!.totalBalance > 0
-                  ? "up"
-                  : metrics!.totalBalance < 0
-                  ? "down"
-                  : "neutral"
-              }
-            />
+            >
+              {metrics!.topCategory ? (
+                <div className="flex w-full min-w-0 flex-col gap-0.5">
+                  <span className="truncate font-display text-2xl font-semibold">
+                    {metrics!.topCategory.category}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    <span className="tabular-nums">
+                      {new Intl.NumberFormat("pt-BR", {
+                        style: "currency",
+                        currency: "BRL",
+                      }).format(metrics!.topCategory.total)}
+                    </span>
+                  </span>
+                </div>
+              ) : (
+                <span className="font-display text-3xl font-semibold text-muted-foreground">
+                  —
+                </span>
+              )}
+            </MetricCard>
             <MetricCard
               label="Pendentes"
               icon={<Receipt />}
@@ -505,22 +518,59 @@ export default function DashboardPage() {
             </MetricCard>
           </section>
 
-          <section className="grid grid-cols-1 gap-4 lg:grid-cols-[1.6fr_1fr]">
-            <LazyMount minHeight={336}>
-              <BalanceChart
-                series={metrics!.chartSeries}
-                startDate={effectiveFilters.start}
-                endDate={effectiveFilters.end}
-              />
-            </LazyMount>
+          <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <LazyMount minHeight={336}>
               <CategoryPieChart
                 title="Você por categoria"
                 description="Gastos pagos por você no período"
                 data={metrics!.categoryTotals}
+                drilldownFor={(category) =>
+                  metrics!.filteredTransactions
+                    .filter(
+                      (t) =>
+                        t.paid_by === user &&
+                        (t.category?.trim() || "Sem categoria") === category
+                    )
+                    .sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0))
+                    .slice(0, 8)
+                    .map((t) => ({
+                      category:
+                        t.description?.trim() || "Sem descrição",
+                      total: t.amount ?? 0,
+                    }))
+                }
+              />
+            </LazyMount>
+            <LazyMount minHeight={336}>
+              <CategoryPieChart
+                title="Grupo por categoria"
+                description="Todas as transações em que você está envolvido"
+                data={metrics!.globalCategoryTotals}
+                drilldownFor={(category) =>
+                  metrics!.filteredTransactions
+                    .filter(
+                      (t) =>
+                        (t.category?.trim() || "Sem categoria") === category
+                    )
+                    .sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0))
+                    .slice(0, 8)
+                    .map((t) => ({
+                      category:
+                        t.description?.trim() || "Sem descrição",
+                      total: t.amount ?? 0,
+                    }))
+                }
               />
             </LazyMount>
           </section>
+
+          <LazyMount minHeight={336}>
+            <BalanceChart
+              series={metrics!.chartSeries}
+              startDate={effectiveFilters.start}
+              endDate={effectiveFilters.end}
+            />
+          </LazyMount>
 
           <PendingRequests
             requests={metrics!.pendingRequests}

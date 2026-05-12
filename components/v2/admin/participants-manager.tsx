@@ -33,6 +33,7 @@ import {
   DialogTitle,
 } from "@/components/v2/primitives/dialog"
 import { ParticipantAvatar } from "@/components/v2/finance/participant-avatar"
+import { InviteGenerator } from "@/components/v2/admin/invite-generator"
 import { reloadParticipants } from "@/lib/participants-cache"
 
 type GuestToken = {
@@ -166,11 +167,12 @@ export function ParticipantsManager() {
             Admin
           </p>
           <h1 className="font-display text-3xl font-semibold tracking-tight">
-            Participantes
+            Participantes e convites
           </h1>
           <p className="text-sm text-muted-foreground">
-            Convidados dinâmicos da plataforma. Gere magic-links pessoais para
-            que vejam o próprio saldo.
+            Mande o link de convite para novos guests se cadastrarem. Cada
+            participante existente tem seus próprios magic-links pessoais
+            geríveis abaixo.
           </p>
         </div>
         <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
@@ -181,6 +183,8 @@ export function ParticipantsManager() {
           Mostrar arquivados
         </label>
       </header>
+
+      <InviteGenerator />
 
       <div className="surface-1 overflow-hidden rounded-xl">
         {loading ? (

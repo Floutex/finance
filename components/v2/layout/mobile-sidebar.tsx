@@ -9,7 +9,6 @@ import {
   Tag,
   Users,
   ScrollText,
-  Send,
 } from "lucide-react"
 
 import { ScrollArea } from "@/components/v2/primitives/scroll-area"
@@ -28,7 +27,6 @@ const ADMIN_NAV: NavItem[] = [
   { label: "Categorias", href: "/admin/categories", icon: Tag },
   { label: "Participantes", href: "/admin/participants", icon: Users },
   { label: "Audit", href: "/admin/audit", icon: ScrollText },
-  { label: "Convites", href: "/admin/invites", icon: Send },
 ]
 
 type MobileSidebarProps = {

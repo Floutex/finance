@@ -20,7 +20,16 @@ import { buttonVariants } from "@/components/v2/primitives/button"
 import { Skeleton } from "@/components/v2/primitives/skeleton"
 import { cn } from "@/components/v2/primitives/utils"
 
-export function InviteGenerator() {
+type InviteGeneratorProps = {
+  className?: string
+}
+
+/**
+ * Card showing the active invite link, with copy and regenerate actions.
+ * Mounted at the top of the Participants admin page (merged from a former
+ * dedicated `/admin/invites` route).
+ */
+export function InviteGenerator({ className }: InviteGeneratorProps) {
   const [token, setToken] = React.useState<string | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [regenOpen, setRegenOpen] = React.useState(false)
@@ -75,22 +84,13 @@ export function InviteGenerator() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 md:gap-8 md:px-8 md:py-8">
-      <header className="space-y-1">
-        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          Admin
-        </p>
-        <h1 className="font-display text-3xl font-semibold tracking-tight">
-          Convites
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Mande este link para que alguém se cadastre como convidado da plataforma.
-          Quem abrir escolhe nome e cor, e recebe um magic-link pessoal pra acessar
-          o próprio saldo.
-        </p>
-      </header>
-
-      <div className="surface-2 flex flex-col gap-4 rounded-2xl p-6">
+    <>
+      <div
+        className={cn(
+          "surface-2 flex flex-col gap-4 rounded-2xl p-5",
+          className
+        )}
+      >
         <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
           <Send className="size-3.5" />
           Link de convite ativo
@@ -108,10 +108,10 @@ export function InviteGenerator() {
           </div>
         )}
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground">
-            Existe um único link ativo por vez. Regenerar revoga o anterior
-            imediatamente.
+            Quem abrir o link escolhe nome e cor, e recebe um magic-link pessoal.
+            Existe um único link ativo por vez.
           </p>
           <Button
             variant="outline"
@@ -155,6 +155,6 @@ export function InviteGenerator() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </>
   )
 }

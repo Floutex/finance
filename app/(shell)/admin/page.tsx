@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Tag, Users, ScrollText, Send, ArrowRight } from "lucide-react"
+import { Tag, Users, ScrollText, ArrowRight } from "lucide-react"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/v2/primitives/card"
 
@@ -12,8 +12,8 @@ const SECTIONS = [
   },
   {
     href: "/admin/participants",
-    label: "Participantes",
-    description: "Membros e convidados dinâmicos, com cor e tokens de acesso.",
+    label: "Participantes e convites",
+    description: "Membros, convidados, cores, tokens de acesso e link de convite global.",
     icon: Users,
   },
   {
@@ -21,12 +21,6 @@ const SECTIONS = [
     label: "Audit log",
     description: "Histórico de ações na plataforma (filtros por ator, ação, data).",
     icon: ScrollText,
-  },
-  {
-    href: "/admin/invites",
-    label: "Convites",
-    description: "Gerar links de convite e revogar acessos pendentes.",
-    icon: Send,
   },
 ] as const
 
@@ -41,7 +35,8 @@ export default function AdminOverviewPage() {
           Painel administrativo
         </h1>
         <p className="text-sm text-muted-foreground">
-          Gerencie categorias, participantes, convites e consulte o histórico de atividades.
+          Gerencie categorias, participantes (incluindo convites) e consulte o
+          histórico de atividades.
         </p>
       </header>
 

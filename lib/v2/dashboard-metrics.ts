@@ -37,6 +37,8 @@ export type DashboardMetrics = {
   categoryTotals: CategoryTotal[]
   /** Global category totals (filtered). Sorted by total desc. */
   globalCategoryTotals: CategoryTotal[]
+  /** Highest-value category from `globalCategoryTotals` (or null if no data). */
+  topCategory: CategoryTotal | null
   /** Top 10 transactions by amount in filtered set. */
   topTransactions: CategoryTotal[]
   /** Running balance time series for current user, over the full transactions
@@ -137,6 +139,7 @@ export function computeDashboardMetrics(args: {
   const globalCategoryTotals: CategoryTotal[] = Array.from(globalCatMap.entries())
     .map(([category, total]) => ({ category, total }))
     .sort((a, b) => b.total - a.total)
+  const topCategory: CategoryTotal | null = globalCategoryTotals[0] ?? null
 
   // ── Top transactions ──
   const topTransactions: CategoryTotal[] = [...filteredTransactions]
@@ -233,6 +236,7 @@ export function computeDashboardMetrics(args: {
     },
     categoryTotals,
     globalCategoryTotals,
+    topCategory,
     topTransactions,
     chartSeries,
     simplifiedDebts,
