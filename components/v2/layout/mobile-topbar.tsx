@@ -39,7 +39,7 @@ export function MobileTopbar({ user, className }: MobileTopbarProps) {
         >
           <Menu className="size-5" />
         </Button>
-        <Link href="/v2/dashboard" className="flex items-center gap-2">
+        <Link href="/dashboard" className="flex items-center gap-2">
           <div className="grid size-7 place-items-center rounded-md bg-primary text-primary-foreground font-display text-sm font-bold">
             G
           </div>

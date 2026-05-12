@@ -52,7 +52,7 @@ export function PinPad() {
     setResolvedUser(match.name)
     setState("success")
     // Slight delay so the success state is perceptible before navigating.
-    setTimeout(() => router.replace("/v2/dashboard"), 350)
+    setTimeout(() => router.replace("/dashboard"), 350)
   }
 
   return (

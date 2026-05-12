@@ -2,37 +2,99 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: 0 0% 0%;
-  --foreground: 210 40% 98%;
-  --muted: 217.2 32.6% 17.5%;
-  --muted-foreground: 215 20.2% 65.1%;
-  --popover: 0 0% 3%;
-  --popover-foreground: 210 40% 98%;
-  --card: 0 0% 3%;
-  --card-foreground: 210 40% 98%;
-  --border: 0 0% 12%;
-  --input: 0 0% 12%;
-  --primary: 210 40% 98%;
-  --primary-foreground: 222.2 47.4% 11.2%;
-  --secondary: 217.2 32.6% 17.5%;
-  --secondary-foreground: 210 40% 98%;
-  --accent: 217.2 32.6% 17.5%;
-  --accent-foreground: 210 40% 98%;
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 0 85.7% 97.3%;
-  --ring: 212.7 26.8% 83.9%;
-  --radius: 0.75rem;
+/*
+ * Gastos Compartilhados — design tokens.
+ *
+ * Premium financial aesthetic: neutral zinc base, single brand accent, restraint
+ * on color, generous radii, soft shadows. Dark-first.
+ */
+
+@layer base {
+  :root {
+    /* Surfaces */
+    --background: 240 6% 6%;
+    --foreground: 0 0% 98%;
+
+    --card: 240 5% 9%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 240 5% 8%;
+    --popover-foreground: 0 0% 98%;
+
+    --muted: 240 4% 14%;
+    --muted-foreground: 240 5% 64%;
+
+    --accent: 240 4% 16%;
+    --accent-foreground: 0 0% 98%;
+
+    /* Brand accent — restrained indigo */
+    --primary: 232 76% 64%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 240 4% 14%;
+    --secondary-foreground: 0 0% 98%;
+
+    /* Semantic */
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 8%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Form */
+    --border: 240 4% 16%;
+    --input: 240 4% 18%;
+    --ring: 232 76% 64%;
+
+    /* Radii */
+    --radius: 0.75rem;
+
+    /* Sidebar */
+    --sidebar-background: 240 6% 7%;
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-border: 240 4% 14%;
+  }
 }
 
-body {
-  font-family: var(--font-sans), system-ui, sans-serif;
-  background-color: hsl(var(--background));
-  color: hsl(var(--foreground));
+@layer base {
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+  }
+
+  *,
+  *::before,
+  *::after {
+    border-color: hsl(var(--border));
+  }
+
+  /* Tabular numbers for finance columns */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+
+  /* Editorial display for large numbers (balances, metrics) */
+  .font-display {
+    font-feature-settings: "tnum", "lnum", "ss01";
+    letter-spacing: -0.02em;
+  }
 }
 
-* {
-  border-color: hsl(var(--border));
+@layer utilities {
+  /* Soft elevated surface — generic for cards/panels */
+  .surface-1 {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+  }
+
+  .surface-2 {
+    background: hsl(var(--popover));
+    border: 1px solid hsl(var(--border));
+    box-shadow: 0 1px 0 0 hsl(0 0% 100% / 0.03) inset,
+      0 8px 24px -12px hsl(0 0% 0% / 0.5);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

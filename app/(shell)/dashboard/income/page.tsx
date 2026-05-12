@@ -13,7 +13,7 @@ export default function IncomePage() {
 
   React.useEffect(() => {
     if (user !== null && !INCOME_USERS.includes(user)) {
-      router.replace("/v2/dashboard")
+      router.replace("/dashboard")
     }
   }, [user, router])
 

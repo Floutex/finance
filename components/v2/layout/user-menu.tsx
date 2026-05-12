@@ -28,7 +28,7 @@ export function UserMenu({ user, collapsed = false }: UserMenuProps) {
     try {
       sessionStorage.removeItem(SESSION_USER_KEY)
     } catch {}
-    router.replace("/v2/login")
+    router.replace("/login")
   }
 
   if (collapsed) {

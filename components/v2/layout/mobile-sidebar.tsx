@@ -19,16 +19,16 @@ import { UserMenu } from "@/components/v2/layout/user-menu"
 import { ADMIN_USER } from "@/lib/constants"
 
 const PRIMARY_NAV: NavItem[] = [
-  { label: "Dashboard", href: "/v2/dashboard", icon: LayoutDashboard, exact: true },
-  { label: "Transações", href: "/v2/dashboard/transactions", icon: Receipt },
-  { label: "Ganho mensal", href: "/v2/dashboard/income", icon: Wallet },
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, exact: true },
+  { label: "Transações", href: "/dashboard/transactions", icon: Receipt },
+  { label: "Ganho mensal", href: "/dashboard/income", icon: Wallet },
 ]
 
 const ADMIN_NAV: NavItem[] = [
-  { label: "Categorias", href: "/v2/admin/categories", icon: Tag },
-  { label: "Participantes", href: "/v2/admin/participants", icon: Users },
-  { label: "Audit", href: "/v2/admin/audit", icon: ScrollText },
-  { label: "Convites", href: "/v2/admin/invites", icon: Send },
+  { label: "Categorias", href: "/admin/categories", icon: Tag },
+  { label: "Participantes", href: "/admin/participants", icon: Users },
+  { label: "Audit", href: "/admin/audit", icon: ScrollText },
+  { label: "Convites", href: "/admin/invites", icon: Send },
 ]
 
 type MobileSidebarProps = {
@@ -48,7 +48,7 @@ export function MobileSidebar({ user, onNavigate }: MobileSidebarProps) {
     <div className="flex h-full flex-col text-sidebar-foreground">
       <div className="flex h-14 items-center gap-2 px-3">
         <Link
-          href="/v2/dashboard"
+          href="/dashboard"
           onClick={onNavigate}
           className="flex items-center gap-2"
         >

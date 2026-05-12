@@ -5,25 +5,25 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 
 const SECTIONS = [
   {
-    href: "/v2/admin/categories",
+    href: "/admin/categories",
     label: "Categorias",
     description: "Criar, renomear e remover categorias de gasto.",
     icon: Tag,
   },
   {
-    href: "/v2/admin/participants",
+    href: "/admin/participants",
     label: "Participantes",
     description: "Membros e convidados dinâmicos, com cor e tokens de acesso.",
     icon: Users,
   },
   {
-    href: "/v2/admin/audit",
+    href: "/admin/audit",
     label: "Audit log",
     description: "Histórico de ações na plataforma (filtros por ator, ação, data).",
     icon: ScrollText,
   },
   {
-    href: "/v2/admin/invites",
+    href: "/admin/invites",
     label: "Convites",
     description: "Gerar links de convite e revogar acessos pendentes.",
     icon: Send,

@@ -47,7 +47,7 @@ export function InviteGenerator() {
     load()
   }, [load])
 
-  const url = token ? `${origin}/v2/g/register/${token}` : ""
+  const url = token ? `${origin}/g/register/${token}` : ""
 
   const handleCopy = async () => {
     if (!url) return

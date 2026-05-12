@@ -150,7 +150,7 @@ export function ParticipantsManager() {
   }
 
   const copyUrl = async (token: string) => {
-    const url = `${origin}/v2/g/${token}`
+    const url = `${origin}/g/${token}`
     try {
       await navigator.clipboard.writeText(url)
       setCopiedToken(token)
@@ -329,7 +329,7 @@ export function ParticipantsManager() {
                         ) : (
                           <ul className="flex flex-col gap-1.5">
                             {g.tokens.map((t) => {
-                              const url = `${origin}/v2/g/${t.token}`
+                              const url = `${origin}/g/${t.token}`
                               const revoked = !!t.revoked_at
                               const isCopied = copiedToken === t.token
                               return (

@@ -25,10 +25,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       if (stored && USERS.some((u) => u.name === stored)) {
         setUser(stored)
       } else {
-        router.replace("/v2/login")
+        router.replace("/login")
       }
     } catch {
-      router.replace("/v2/login")
+      router.replace("/login")
     } finally {
       setChecked(true)
     }
