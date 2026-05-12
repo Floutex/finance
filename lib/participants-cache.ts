@@ -12,11 +12,16 @@ interface ParticipantsCache {
     promise: Promise<Participant[]> | null
 }
 
-const cache: ParticipantsCache = {
+let cache: ParticipantsCache = {
     data: null,
     loading: false,
     error: null,
     promise: null,
+}
+
+function setCacheState(patch: Partial<ParticipantsCache>) {
+    cache = { ...cache, ...patch }
+    notifySubscribers()
 }
 
 const subscribers = new Set<() => void>()
@@ -36,57 +41,58 @@ export function getParticipantsFromCache(): ParticipantsCache {
     return cache
 }
 
+async function runFetch(): Promise<Participant[]> {
+    const supabase = getSupabaseClient()
+    try {
+        const { data, error } = await supabase
+            .from("participants")
+            .select("*")
+            .order("kind", { ascending: true })
+            .order("name", { ascending: true })
+        if (error) {
+            setCacheState({
+                error: error.message,
+                data: cache.data ?? [],
+                loading: false,
+                promise: null,
+            })
+            throw error
+        }
+        setCacheState({ data: data ?? [], loading: false, promise: null, error: null })
+        return data ?? []
+    } catch (e) {
+        setCacheState({ loading: false, promise: null })
+        throw e
+    }
+}
+
 export async function fetchParticipants(): Promise<Participant[]> {
     if (cache.promise) return cache.promise
     if (cache.data !== null) return Promise.resolve(cache.data)
 
-    cache.loading = true
-    cache.error = null
-    notifySubscribers()
-
-    const supabase = getSupabaseClient()
-
-    const loadData = async (): Promise<Participant[]> => {
-        try {
-            const { data, error } = await supabase
-                .from("participants")
-                .select("*")
-                .order("kind", { ascending: true })
-                .order("name", { ascending: true })
-            if (error) {
-                cache.error = error.message
-                cache.data = []
-                throw error
-            }
-            cache.data = data ?? []
-            return cache.data
-        } finally {
-            cache.loading = false
-            cache.promise = null
-            notifySubscribers()
-        }
-    }
-
-    cache.promise = loadData()
-    return cache.promise
+    const promise = runFetch()
+    setCacheState({ loading: true, error: null, promise })
+    return promise
 }
 
 export function updateParticipantsCache(updater: (prev: Participant[]) => Participant[]) {
     if (cache.data === null) return
-    cache.data = updater(cache.data)
-    notifySubscribers()
+    setCacheState({ data: updater(cache.data) })
 }
 
 export function invalidateParticipantsCache() {
-    cache.data = null
-    cache.loading = false
-    cache.error = null
-    cache.promise = null
+    setCacheState({ data: null, loading: false, error: null, promise: null })
 }
 
 export async function reloadParticipants(): Promise<Participant[]> {
-    invalidateParticipantsCache()
-    return fetchParticipants()
+    if (cache.data === null) {
+        setCacheState({ promise: null })
+        return fetchParticipants()
+    }
+    if (cache.promise) return cache.promise
+    const promise = runFetch()
+    setCacheState({ loading: true, error: null, promise })
+    return promise
 }
 
 if (typeof window !== "undefined") {

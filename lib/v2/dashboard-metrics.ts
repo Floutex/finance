@@ -20,6 +20,12 @@ export type CategoryTotal = { category: string; total: number }
 
 export type BalancePoint = { date: string; balance: number }
 
+export type DailyDelta = {
+  id: string
+  description: string
+  delta: number
+}
+
 export type DashboardMetrics = {
   /** Visible transactions for the current user (legacy: Admin sees all). */
   userTransactions: Transaction[]
@@ -44,6 +50,9 @@ export type DashboardMetrics = {
   /** Running balance time series for current user, over the full transactions
    *  set (chart can re-slice to date range itself). */
   chartSeries: BalancePoint[]
+  /** Per-day breakdown: list of transactions that mutated the user's balance
+   *  on that date, with each transaction's signed delta. Keyed by yyyy-MM-dd. */
+  dailyBreakdown: Record<string, DailyDelta[]>
   /** Net debts simplified (over full transactions set). */
   simplifiedDebts: Debt[]
   /** Debts touching current user only, with sign relative to them. */
@@ -169,6 +178,8 @@ export function computeDashboardMetrics(args: {
           ? new Map<string, number>()
           : calculateShares({ amount, participants }, monthIncomes, customShares)
       return {
+        id: t.id,
+        description: t.description,
         date: t.date,
         amount,
         paid_by: t.paid_by,
@@ -178,19 +189,32 @@ export function computeDashboardMetrics(args: {
       }
     })
 
-  // ── Chart series (running balance for current user) ──
+  // ── Chart series (running balance for current user) + per-day breakdown ──
   let running = 0
   const dateBalance = new Map<string, number>()
+  const dailyBreakdown: Record<string, DailyDelta[]> = {}
   for (const t of normalized) {
     if (t.participants.length === 0) continue
     const myShare = t.shares.get(currentUser) ?? t.amount / t.participants.length
     const isParticipant = t.participants.includes(currentUser)
     const isPayer = t.paid_by === currentUser
-    if (isPayer && isParticipant) running += t.amount - myShare
-    else if (isPayer && !isParticipant) running += t.amount
-    else if (!isPayer && isParticipant) running -= myShare
-    if (isPayer || isParticipant)
+    let delta = 0
+    if (isPayer && isParticipant) delta = t.amount - myShare
+    else if (isPayer && !isParticipant) delta = t.amount
+    else if (!isPayer && isParticipant) delta = -myShare
+    if (isPayer || isParticipant) {
+      running += delta
       dateBalance.set(t.date, Number(running.toFixed(2)))
+      const rounded = Number(delta.toFixed(2))
+      if (rounded !== 0) {
+        const entry: DailyDelta = {
+          id: t.id,
+          description: normalizeText(t.description) || "Sem descrição",
+          delta: rounded,
+        }
+        ;(dailyBreakdown[t.date] ??= []).push(entry)
+      }
+    }
   }
   const chartSeries: BalancePoint[] = Array.from(dateBalance.entries()).map(
     ([date, balance]) => ({ date, balance })
@@ -239,6 +263,7 @@ export function computeDashboardMetrics(args: {
     topCategory,
     topTransactions,
     chartSeries,
+    dailyBreakdown,
     simplifiedDebts,
     myDebts,
     totalBalance,

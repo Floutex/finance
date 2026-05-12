@@ -1,39 +1,33 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useSyncExternalStore } from "react"
 import {
-  deleteMonthlyIncome,
-  getMonthlyIncomes,
-  upsertMonthlyIncome,
-} from "@/lib/supabase"
-import type { Tables } from "@/lib/database.types"
-
-type MonthlyIncome = Tables<"monthly_incomes">
+  deleteMonthlyIncomeAndReload,
+  fetchMonthlyIncomes,
+  getMonthlyIncomesFromCache,
+  reloadMonthlyIncomes,
+  subscribeToMonthlyIncomes,
+  upsertMonthlyIncomeAndReload,
+} from "@/lib/monthly-incomes-cache"
 
 /**
- * Hook to load monthly incomes and expose mutation helpers backed by
- * `upsertMonthlyIncome` and `deleteMonthlyIncome`. Cache is local; refetch is
- * called after each successful mutation.
+ * Hook to load monthly incomes and expose mutation helpers backed by a global
+ * cache (shared across all consumers, persists across SPA navigation).
  */
 export function useMonthlyIncomes() {
-  const [incomes, setIncomes] = useState<MonthlyIncome[]>([])
-  const [loading, setLoading] = useState(true)
-
-  const load = useCallback(async () => {
-    try {
-      const { data, error } = await getMonthlyIncomes()
-      if (error) throw error
-      if (data) setIncomes(data)
-    } catch (e) {
-      console.error("[use-monthly-incomes] load failed:", e)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const cache = useSyncExternalStore(
+    subscribeToMonthlyIncomes,
+    getMonthlyIncomesFromCache,
+    getMonthlyIncomesFromCache
+  )
 
   useEffect(() => {
-    load()
-  }, [load])
+    if (cache.data === null && !cache.loading) {
+      fetchMonthlyIncomes().catch(() => {
+        /* errors handled in the cache */
+      })
+    }
+  }, [cache.data, cache.loading])
 
   const upsert = useCallback(
     async (
@@ -42,21 +36,25 @@ export function useMonthlyIncomes() {
       amount: number,
       isFixed: boolean
     ) => {
-      const { error } = await upsertMonthlyIncome(person, yearMonth, amount, isFixed)
-      if (error) throw new Error(error.message)
-      await load()
+      await upsertMonthlyIncomeAndReload(person, yearMonth, amount, isFixed)
     },
-    [load]
+    []
   )
 
-  const remove = useCallback(
-    async (id: string) => {
-      const { error } = await deleteMonthlyIncome(id)
-      if (error) throw new Error(error.message)
-      await load()
-    },
-    [load]
-  )
+  const remove = useCallback(async (id: string) => {
+    await deleteMonthlyIncomeAndReload(id)
+  }, [])
 
-  return { incomes, loading, upsert, remove, reload: load }
+  const reload = useCallback(async () => {
+    await reloadMonthlyIncomes()
+  }, [])
+
+  return {
+    incomes: cache.data ?? [],
+    loading: cache.data === null && cache.loading,
+    error: cache.error,
+    upsert,
+    remove,
+    reload,
+  }
 }

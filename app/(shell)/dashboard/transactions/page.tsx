@@ -163,14 +163,13 @@ export default function TransactionsPage() {
     })
   }, [user, transactions, incomes, memberNames, effectiveFilters])
 
-  // Show the skeleton only on the first load; later refetches keep content visible.
-  const hasRenderedOnceRef = React.useRef(false)
-  if (!hasRenderedOnceRef.current && metrics && user) {
-    hasRenderedOnceRef.current = true
-  }
-  const isLoading =
-    !hasRenderedOnceRef.current &&
-    (!user || txLoading || pLoading || incLoading || !metrics)
+  // Show the skeleton only until ALL caches finish their first load. After
+  // that, background refetches keep the page interactive.
+  const initialLoadComplete =
+    !!user && !txLoading && !pLoading && !incLoading && !!metrics
+  const hasShownContentRef = React.useRef(false)
+  if (initialLoadComplete) hasShownContentRef.current = true
+  const isLoading = !hasShownContentRef.current
 
   const selectedIds = React.useMemo(
     () => Object.keys(rowSelection).filter((id) => rowSelection[id]),

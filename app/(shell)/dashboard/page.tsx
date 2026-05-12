@@ -201,16 +201,14 @@ export default function DashboardPage() {
     })
   }, [user, transactions, incomes, memberNames, effectiveFilters])
 
-  // Show the full skeleton only on the FIRST load. Once we've rendered real
-  // content once, subsequent background refetches (bulk delete, edit, etc.)
-  // keep the page interactive instead of flickering back to the skeleton.
-  const hasRenderedOnceRef = React.useRef(false)
-  if (!hasRenderedOnceRef.current && metrics && user) {
-    hasRenderedOnceRef.current = true
-  }
-  const isLoading =
-    !hasRenderedOnceRef.current &&
-    (!user || txLoading || pLoading || incLoading || !metrics)
+  // Show the skeleton only until ALL caches have finished their first load.
+  // After that, background refetches (bulk delete, edit, etc.) keep the page
+  // interactive instead of flickering back to the skeleton.
+  const initialLoadComplete =
+    !!user && !txLoading && !pLoading && !incLoading && !!metrics
+  const hasShownContentRef = React.useRef(false)
+  if (initialLoadComplete) hasShownContentRef.current = true
+  const isLoading = !hasShownContentRef.current
 
   // ── Selection helpers ─────────────────────────────────────────────────────
   const selectedIds = React.useMemo(
@@ -577,6 +575,7 @@ export default function DashboardPage() {
           <LazyMount minHeight={336}>
             <BalanceChart
               series={metrics!.chartSeries}
+              dailyBreakdown={metrics!.dailyBreakdown}
               startDate={effectiveFilters.start}
               endDate={effectiveFilters.end}
             />

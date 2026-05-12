@@ -12,15 +12,21 @@ interface TransactionsCache {
     promise: Promise<Transaction[]> | null
 }
 
-// Global cache that persists across component mounts
-const cache: TransactionsCache = {
+// Global cache that persists across component mounts. The object is REPLACED
+// (not mutated) on every state change so useSyncExternalStore snapshots
+// compare unequal and subscribers actually re-render.
+let cache: TransactionsCache = {
     data: null,
     loading: false,
     error: null,
     promise: null,
 }
 
-// Subscribers to notify when cache updates
+function setCacheState(patch: Partial<TransactionsCache>) {
+    cache = { ...cache, ...patch }
+    notifySubscribers()
+}
+
 const subscribers = new Set<() => void>()
 
 function notifySubscribers() {
@@ -38,74 +44,66 @@ export function getTransactionsFromCache(): TransactionsCache {
     return cache
 }
 
-export async function fetchTransactions(): Promise<Transaction[]> {
-    // If already loading, return the existing promise
-    if (cache.promise) {
-        return cache.promise
-    }
-
-    // If we have cached data, return it immediately
-    if (cache.data !== null) {
-        return Promise.resolve(cache.data)
-    }
-
-    cache.loading = true
-    cache.error = null
-    notifySubscribers()
-
+async function runFetch(): Promise<Transaction[]> {
     const supabase = getSupabaseClient()
+    try {
+        const { data, error } = await supabase
+            .from("shared_transactions")
+            .select("*")
+            .eq("is_hidden", false)
+            .order("date", { ascending: false })
+            .order("created_at", { ascending: false })
 
-    const loadData = async (): Promise<Transaction[]> => {
-        try {
-            const { data, error } = await supabase
-                .from("shared_transactions")
-                .select("*")
-                .eq("is_hidden", false)
-                .order("date", { ascending: false })
-                .order("created_at", { ascending: false })
-
-            if (error) {
-                cache.error = error.message
-                cache.data = []
-                throw error
-            }
-
-            cache.data = data ?? []
-            return cache.data
-        } finally {
-            cache.loading = false
-            cache.promise = null
-            notifySubscribers()
+        if (error) {
+            setCacheState({ error: error.message, data: cache.data ?? [], loading: false, promise: null })
+            throw error
         }
+        setCacheState({ data: data ?? [], loading: false, promise: null, error: null })
+        return data ?? []
+    } catch (e) {
+        setCacheState({ loading: false, promise: null })
+        throw e
     }
+}
 
-    cache.promise = loadData()
-    return cache.promise
+export async function fetchTransactions(): Promise<Transaction[]> {
+    if (cache.promise) return cache.promise
+    if (cache.data !== null) return Promise.resolve(cache.data)
+
+    const promise = runFetch()
+    setCacheState({ loading: true, error: null, promise })
+    return promise
 }
 
 export function updateTransactionsCache(updater: (prev: Transaction[]) => Transaction[]) {
-    if (cache.data === null) {
-        return
-    }
-    cache.data = updater(cache.data)
-    notifySubscribers()
+    if (cache.data === null) return
+    setCacheState({ data: updater(cache.data) })
 }
 
 export function invalidateTransactionsCache() {
-    cache.data = null
-    cache.loading = false
-    cache.error = null
-    cache.promise = null
+    setCacheState({ data: null, loading: false, error: null, promise: null })
 }
 
+/**
+ * Force a refetch but KEEP the existing `cache.data` visible to consumers
+ * until the fresh data arrives — avoids flashing an empty list. If there is no
+ * data yet, falls back to the initial fetch behavior.
+ */
 export async function reloadTransactions(): Promise<Transaction[]> {
-    invalidateTransactionsCache()
-    return fetchTransactions()
+    if (cache.data === null) {
+        setCacheState({ promise: null })
+        return fetchTransactions()
+    }
+    if (cache.promise) return cache.promise
+
+    const promise = runFetch()
+    setCacheState({ loading: true, error: null, promise })
+    return promise
 }
 
 // Start prefetching immediately when this module is imported
 if (typeof window !== "undefined") {
     fetchTransactions().catch(() => {
-        // Silently handle prefetch errors - they'll be handled when the component mounts
+        // Silently handle prefetch errors - they'll surface via cache.error
     })
 }
