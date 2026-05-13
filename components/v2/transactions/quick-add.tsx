@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Loader2, Search, Sparkles } from "lucide-react"
+import { Loader2, Sparkles } from "lucide-react"
 
 import { cn } from "@/components/v2/primitives/utils"
 import { Dialog, DialogContent } from "@/components/v2/primitives/dialog"
@@ -88,7 +88,7 @@ export function QuickAdd({ currentUser, defaultParticipants }: QuickAddProps) {
         <div className="flex h-full w-full flex-col overflow-hidden rounded-md bg-popover text-popover-foreground">
           {/* Input row — mimics CommandInput exactly */}
           <div className="flex items-center border-b border-border px-3">
-            <Search className="mr-2 size-4 shrink-0 opacity-50" />
+            <Sparkles className="mr-2 size-4 shrink-0 text-primary opacity-80" />
             <input
               ref={inputRef}
               value={query}

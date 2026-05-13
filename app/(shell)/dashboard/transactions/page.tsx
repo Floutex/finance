@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import dynamic from "next/dynamic"
-import { Command, HandCoins, Plus, ScanLine } from "lucide-react"
+import { Command, HandCoins, Plus, ScanLine, Users } from "lucide-react"
 import { toast } from "sonner"
 import type { RowSelectionState } from "@tanstack/react-table"
 
@@ -103,6 +103,7 @@ export default function TransactionsPage() {
   const [bulkPending, setBulkPending] = React.useState(false)
   const [receiptOpen, setReceiptOpen] = React.useState(false)
   const [requestOpen, setRequestOpen] = React.useState(false)
+  const [viewAll, setViewAll] = React.useState(false)
 
   const memberNames = React.useMemo(() => members.map((m) => m.name), [members])
   const isAdmin = isAdminUser(user)
@@ -160,8 +161,9 @@ export default function TransactionsPage() {
       memberNames,
       currentUser: user,
       filters: effectiveFilters,
+      viewAll,
     })
-  }, [user, transactions, incomes, memberNames, effectiveFilters])
+  }, [user, transactions, incomes, memberNames, effectiveFilters, viewAll])
 
   // Show the skeleton only until ALL caches finish their first load. After
   // that, background refetches keep the page interactive.
@@ -350,7 +352,7 @@ export default function TransactionsPage() {
   )
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 md:gap-8 md:px-8 md:py-8">
+    <div className="mx-auto flex w-full max-w-[88rem] flex-col gap-6 px-4 py-6 md:gap-8 md:px-8 md:py-8">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-1">
           <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -366,6 +368,16 @@ export default function TransactionsPage() {
           </p>
         </div>
         <div className="hidden items-center gap-2 md:flex">
+          {isAdmin && (
+            <Button
+              variant={viewAll ? "default" : "outline"}
+              onClick={() => setViewAll((v) => !v)}
+              aria-pressed={viewAll}
+            >
+              <Users />
+              {viewAll ? "Vendo tudo" : "Ver tudo"}
+            </Button>
+          )}
           <Button variant="outline" onClick={() => setReceiptOpen(true)}>
             <ScanLine />
             Analisar recibo

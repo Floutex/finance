@@ -35,6 +35,16 @@ import {
 import { ParticipantAvatar } from "@/components/v2/finance/participant-avatar"
 import { InviteGenerator } from "@/components/v2/admin/invite-generator"
 import { reloadParticipants } from "@/lib/participants-cache"
+import { useTransactions } from "@/hooks/use-transactions"
+import { useMonthlyIncomes } from "@/hooks/use-monthly-incomes"
+import { simplifyDebts } from "@/lib/debt-simplification"
+import { buildIncomeMap } from "@/lib/proportional-split"
+import { PENDING_MARKER } from "@/lib/constants"
+
+const BRL = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+})
 
 type GuestToken = {
   token: string
@@ -73,6 +83,35 @@ export function ParticipantsManager() {
   const [pendingId, setPendingId] = React.useState<string | null>(null)
   const [copiedToken, setCopiedToken] = React.useState<string | null>(null)
   const [origin, setOrigin] = React.useState("")
+
+  const { transactions } = useTransactions()
+  const { incomes } = useMonthlyIncomes()
+
+  // Net balance per name, derived from the same engine as the dashboard so
+  // the numbers stay consistent. positive => receivable; negative => payable.
+  const balanceByName = React.useMemo(() => {
+    const map = new Map<string, number>()
+    if (transactions.length === 0) return map
+    const monthsSet = new Set<string>()
+    for (const t of transactions) monthsSet.add(t.date.slice(0, 7))
+    const incomeMap = buildIncomeMap(incomes, Array.from(monthsSet))
+    const inputs = transactions
+      .filter((t) => t.paid_by !== PENDING_MARKER)
+      .map((t) => ({
+        paid_by: t.paid_by,
+        amount: t.amount ?? 0,
+        participants: t.participants ?? [],
+        date: t.date,
+        custom_shares:
+          (t.custom_shares as Record<string, number> | null) ?? null,
+      }))
+    const debts = simplifyDebts(inputs, incomeMap)
+    for (const d of debts) {
+      map.set(d.to, (map.get(d.to) ?? 0) + d.amount)
+      map.set(d.from, (map.get(d.from) ?? 0) - d.amount)
+    }
+    return map
+  }, [transactions, incomes])
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -222,14 +261,31 @@ export function ParticipantsManager() {
                     </button>
                     <ParticipantAvatar name={g.name} hex={g.color} size="sm" />
                     <div className="min-w-0 flex-1">
-                      <p
-                        className={cn(
-                          "truncate text-sm font-medium",
-                          g.is_archived && "text-muted-foreground line-through"
-                        )}
-                      >
-                        {g.name}
-                      </p>
+                      <div className="flex flex-wrap items-center gap-x-2">
+                        <p
+                          className={cn(
+                            "truncate text-sm font-medium",
+                            g.is_archived && "text-muted-foreground line-through"
+                          )}
+                        >
+                          {g.name}
+                        </p>
+                        {(() => {
+                          const b = balanceByName.get(g.name) ?? 0
+                          if (Math.abs(b) < 0.005) return null
+                          return (
+                            <span
+                              className={cn(
+                                "text-xs font-medium tabular-nums",
+                                b > 0 ? "text-emerald-500" : "text-rose-500"
+                              )}
+                            >
+                              {b > 0 ? "recebe " : "deve "}
+                              {BRL.format(Math.abs(b))}
+                            </span>
+                          )
+                        })()}
+                      </div>
                       <p className="text-xs text-muted-foreground">
                         {g.transactionCount}{" "}
                         {g.transactionCount === 1 ? "transação" : "transações"}
@@ -286,7 +342,39 @@ export function ParticipantsManager() {
 
                   {expanded && (
                     <div className="ml-7 mt-3 space-y-3">
-                      <div className="grid grid-cols-3 gap-3 rounded-md border border-border bg-background/40 p-3 text-xs">
+                      <div className="grid grid-cols-2 gap-3 rounded-md border border-border bg-background/40 p-3 text-xs sm:grid-cols-4">
+                        <div>
+                          {(() => {
+                            const b = balanceByName.get(g.name) ?? 0
+                            const zero = Math.abs(b) < 0.005
+                            return (
+                              <>
+                                <p
+                                  className={cn(
+                                    "font-medium tabular-nums",
+                                    zero
+                                      ? ""
+                                      : b > 0
+                                      ? "text-emerald-500"
+                                      : "text-rose-500"
+                                  )}
+                                >
+                                  {zero
+                                    ? BRL.format(0)
+                                    : (b > 0 ? "+" : "−") +
+                                      BRL.format(Math.abs(b))}
+                                </p>
+                                <p className="text-muted-foreground">
+                                  {zero
+                                    ? "saldo"
+                                    : b > 0
+                                    ? "a receber"
+                                    : "a pagar"}
+                                </p>
+                              </>
+                            )
+                          })()}
+                        </div>
                         <div>
                           <p className="font-medium">{g.transactionCount}</p>
                           <p className="text-muted-foreground">transações</p>

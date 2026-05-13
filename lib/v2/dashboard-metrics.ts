@@ -93,13 +93,18 @@ export function computeDashboardMetrics(args: {
   memberNames: string[]
   currentUser: string
   filters?: Filters
+  /** Admin-only escape hatch: when true, admin sees everyone's transactions. */
+  viewAll?: boolean
 }): DashboardMetrics {
   const { transactions, monthlyIncomes, memberNames, currentUser } = args
   const search = (args.filters?.search ?? "").trim().toLowerCase()
   const { start, end } = args.filters ?? {}
 
-  // ── Visibility (mirrors legacy rules) ──
+  // ── Visibility ──
+  // Admins now see only their own transactions by default; the `/transactions`
+  // page can opt-in to "see everything" via `viewAll`.
   const isAdmin = isAdminUser(currentUser)
+  const seesAll = isAdmin && args.viewAll === true
   const pendingRequests: Transaction[] = []
   const userTransactions: Transaction[] = []
   for (const t of transactions) {
@@ -107,7 +112,7 @@ export function computeDashboardMetrics(args: {
       pendingRequests.push(t)
       continue
     }
-    if (isAdmin) {
+    if (seesAll) {
       userTransactions.push(t)
     } else if (
       t.paid_by === currentUser ||
