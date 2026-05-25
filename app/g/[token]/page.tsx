@@ -35,21 +35,21 @@ export default function GuestDashboardPage() {
   if (!metrics) return null
 
   return (
-    <div className="flex flex-col gap-6 py-6 md:gap-8 md:py-8">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+    <div className="mx-auto flex w-full max-w-[88rem] flex-col gap-6 px-4 py-6 md:gap-8 md:px-8 md:py-8">
+      <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-1">
           <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
             Dashboard
           </p>
-          <h2 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">
-            Visão geral
-          </h2>
+          <h1 className="font-display text-3xl font-semibold tracking-tight">
+            Olá, {participant.name}
+          </h1>
         </div>
         <Button onClick={() => setPaybackOpen(true)}>
           <HandCoins />
           Acertar conta
         </Button>
-      </div>
+      </header>
 
       <DashboardOverview
         metrics={metrics}

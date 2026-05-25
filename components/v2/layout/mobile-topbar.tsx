@@ -8,19 +8,32 @@ import { cn } from "@/components/v2/primitives/utils"
 import { Button } from "@/components/v2/primitives/button"
 import { Sheet, SheetContent, SheetTitle } from "@/components/v2/primitives/sheet"
 import { MobileSidebar } from "@/components/v2/layout/mobile-sidebar"
-import { ParticipantAvatar } from "@/components/v2/finance/participant-avatar"
-import { UserMenu } from "@/components/v2/layout/user-menu"
+import type { SidebarSecondaryNav } from "@/components/v2/layout/sidebar"
+import type { NavItem } from "@/components/v2/layout/nav-section"
 
-type MobileTopbarProps = {
-  user: string
+export type MobileTopbarProps = {
+  primaryNav: NavItem[]
+  secondaryNav?: SidebarSecondaryNav | null
+  /** Footer used inside the drawer. */
+  drawerFooter: React.ReactNode
+  /** Right-aligned slot in the topbar (user menu / avatar). */
+  rightSlot: React.ReactNode
+  brandHref?: string
   className?: string
 }
 
 /**
  * Fixed-top mobile header — hidden on `md` and up. Hamburger opens the sidebar
- * as a drawer; user avatar opens the same dropdown the desktop sidebar uses.
+ * as a drawer; `rightSlot` shows whatever account control fits the shell.
  */
-export function MobileTopbar({ user, className }: MobileTopbarProps) {
+export function MobileTopbar({
+  primaryNav,
+  secondaryNav,
+  drawerFooter,
+  rightSlot,
+  brandHref = "/dashboard",
+  className,
+}: MobileTopbarProps) {
   const [open, setOpen] = React.useState(false)
 
   return (
@@ -39,7 +52,7 @@ export function MobileTopbar({ user, className }: MobileTopbarProps) {
         >
           <Menu className="size-5" />
         </Button>
-        <Link href="/dashboard" className="flex items-center gap-2">
+        <Link href={brandHref} className="flex items-center gap-2">
           <div className="grid size-7 place-items-center rounded-md bg-primary text-primary-foreground font-display text-sm font-bold">
             G
           </div>
@@ -47,9 +60,7 @@ export function MobileTopbar({ user, className }: MobileTopbarProps) {
             Gastos<span className="text-muted-foreground">.</span>
           </span>
         </Link>
-        <div className="ml-auto">
-          <UserMenu user={user} collapsed />
-        </div>
+        <div className="ml-auto">{rightSlot}</div>
       </header>
 
       <Sheet open={open} onOpenChange={setOpen}>
@@ -58,7 +69,13 @@ export function MobileTopbar({ user, className }: MobileTopbarProps) {
           className="w-[280px] border-r border-sidebar-border bg-sidebar p-0"
         >
           <SheetTitle className="sr-only">Menu</SheetTitle>
-          <MobileSidebar user={user} onNavigate={() => setOpen(false)} />
+          <MobileSidebar
+            primaryNav={primaryNav}
+            secondaryNav={secondaryNav}
+            footer={drawerFooter}
+            brandHref={brandHref}
+            onNavigate={() => setOpen(false)}
+          />
         </SheetContent>
       </Sheet>
     </>

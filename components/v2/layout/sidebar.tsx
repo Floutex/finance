@@ -2,16 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import {
-  LayoutDashboard,
-  Wallet,
-  Receipt,
-  Tag,
-  Users,
-  ScrollText,
-  PanelLeftClose,
-  PanelLeft,
-} from "lucide-react"
+import { PanelLeftClose, PanelLeft } from "lucide-react"
 
 import { cn } from "@/components/v2/primitives/utils"
 import { ScrollArea } from "@/components/v2/primitives/scroll-area"
@@ -23,28 +14,29 @@ import {
   TooltipTrigger,
 } from "@/components/v2/primitives/tooltip"
 import { NavSection, type NavItem } from "@/components/v2/layout/nav-section"
-import { UserMenu } from "@/components/v2/layout/user-menu"
-import { isAdminUser } from "@/lib/constants"
-
-const PRIMARY_NAV: NavItem[] = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, exact: true },
-  { label: "Transações", href: "/dashboard/transactions", icon: Receipt },
-  { label: "Ganho mensal", href: "/dashboard/income", icon: Wallet },
-]
-
-const ADMIN_NAV: NavItem[] = [
-  { label: "Categorias", href: "/admin/categories", icon: Tag },
-  { label: "Participantes", href: "/admin/participants", icon: Users },
-  { label: "Audit", href: "/admin/audit", icon: ScrollText },
-]
 
 const STORAGE_KEY = "v2:sidebar-collapsed"
 
-type SidebarProps = {
-  user: string
+export type SidebarSecondaryNav = {
+  label?: string
+  items: NavItem[]
 }
 
-export function Sidebar({ user }: SidebarProps) {
+export type SidebarProps = {
+  primaryNav: NavItem[]
+  secondaryNav?: SidebarSecondaryNav | null
+  /** Footer slot — receives the current collapsed state. */
+  footer: (collapsed: boolean) => React.ReactNode
+  /** Where the brand block links to. Defaults to `/dashboard`. */
+  brandHref?: string
+}
+
+export function Sidebar({
+  primaryNav,
+  secondaryNav,
+  footer,
+  brandHref = "/dashboard",
+}: SidebarProps) {
   const [collapsed, setCollapsed] = React.useState(false)
 
   // Hydrate the user's last preference once we're on the client.
@@ -65,8 +57,6 @@ export function Sidebar({ user }: SidebarProps) {
     })
   }
 
-  const isAdmin = isAdminUser(user)
-
   return (
     <aside
       className={cn(
@@ -76,7 +66,7 @@ export function Sidebar({ user }: SidebarProps) {
     >
       <div className="flex h-14 items-center gap-2 px-3">
         <Link
-          href="/dashboard"
+          href={brandHref}
           className="flex items-center gap-2 overflow-hidden"
           aria-label="Ir para o dashboard"
         >
@@ -115,24 +105,22 @@ export function Sidebar({ user }: SidebarProps) {
       <Separator />
 
       <ScrollArea className="flex-1 px-2 py-3">
-        <NavSection items={PRIMARY_NAV} collapsed={collapsed} />
-        {isAdmin && (
+        <NavSection items={primaryNav} collapsed={collapsed} />
+        {secondaryNav && (
           <>
             <div className="my-3">
               <Separator />
             </div>
             <NavSection
-              label={collapsed ? undefined : "Admin"}
-              items={ADMIN_NAV}
+              label={collapsed ? undefined : secondaryNav.label}
+              items={secondaryNav.items}
               collapsed={collapsed}
             />
           </>
         )}
       </ScrollArea>
 
-      <div className="border-t border-sidebar-border p-2">
-        <UserMenu user={user} collapsed={collapsed} />
-      </div>
+      <div className="border-t border-sidebar-border p-2">{footer(collapsed)}</div>
     </aside>
   )
 }

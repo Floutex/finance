@@ -27,15 +27,15 @@ export default function GuestTransactionsPage() {
   if (!metrics) return null
 
   return (
-    <div className="flex flex-col gap-6 py-6 md:gap-8 md:py-8">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+    <div className="mx-auto flex w-full max-w-[88rem] flex-col gap-6 px-4 py-6 md:gap-8 md:px-8 md:py-8">
+      <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-1">
           <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
             Transações
           </p>
-          <h2 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">
+          <h1 className="font-display text-3xl font-semibold tracking-tight">
             Todas as transações
-          </h2>
+          </h1>
           <p className="text-sm text-muted-foreground">
             {metrics.filteredTransactions.length} de {metrics.userTransactions.length} visíveis
           </p>
@@ -44,7 +44,7 @@ export default function GuestTransactionsPage() {
           <HandCoins />
           Acertar conta
         </Button>
-      </div>
+      </header>
 
       <TransactionsWorkspace
         transactions={metrics.filteredTransactions}

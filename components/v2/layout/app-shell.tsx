@@ -2,16 +2,38 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
+import {
+  LayoutDashboard,
+  Wallet,
+  Receipt,
+  Tag,
+  Users,
+  ScrollText,
+} from "lucide-react"
 
-import { Sidebar } from "@/components/v2/layout/sidebar"
+import { Sidebar, type SidebarSecondaryNav } from "@/components/v2/layout/sidebar"
 import { MobileTopbar } from "@/components/v2/layout/mobile-topbar"
 import { OfflineBanner } from "@/components/v2/layout/offline-banner"
 import { ShortcutsCheatsheet } from "@/components/v2/layout/shortcuts-cheatsheet"
-import { SESSION_USER_KEY, USERS } from "@/lib/constants"
+import { UserMenu } from "@/components/v2/layout/user-menu"
+import type { NavItem } from "@/components/v2/layout/nav-section"
+import { SESSION_USER_KEY, USERS, isAdminUser } from "@/lib/constants"
+
+const PRIMARY_NAV: NavItem[] = [
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, exact: true },
+  { label: "Transações", href: "/dashboard/transactions", icon: Receipt },
+  { label: "Ganho mensal", href: "/dashboard/income", icon: Wallet },
+]
+
+const ADMIN_NAV: NavItem[] = [
+  { label: "Categorias", href: "/admin/categories", icon: Tag },
+  { label: "Participantes", href: "/admin/participants", icon: Users },
+  { label: "Audit", href: "/admin/audit", icon: ScrollText },
+]
 
 /**
  * Authenticated app shell — sidebar + content area. Reads the session user from
- * `sessionStorage` (shared with the legacy /); bounces to /v2/login if absent
+ * `sessionStorage` (shared with the legacy /); bounces to /login if absent
  * or unknown. Used by the `(shell)` route group's layout.
  */
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -44,6 +66,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     )
   }
 
+  const isAdmin = isAdminUser(user)
+  const secondaryNav: SidebarSecondaryNav | null = isAdmin
+    ? { label: "Admin", items: ADMIN_NAV }
+    : null
+
   return (
     <div className="flex min-h-screen bg-background">
       <a
@@ -52,10 +79,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       >
         Pular para o conteúdo
       </a>
-      <Sidebar user={user} />
+      <Sidebar
+        primaryNav={PRIMARY_NAV}
+        secondaryNav={secondaryNav}
+        footer={(collapsed) => <UserMenu user={user} collapsed={collapsed} />}
+      />
       <div className="flex min-w-0 flex-1 flex-col">
         <OfflineBanner />
-        <MobileTopbar user={user} />
+        <MobileTopbar
+          primaryNav={PRIMARY_NAV}
+          secondaryNav={secondaryNav}
+          drawerFooter={<UserMenu user={user} />}
+          rightSlot={<UserMenu user={user} collapsed />}
+        />
         <main id="v2-main" className="min-w-0 flex-1">
           {children}
         </main>
