@@ -5,24 +5,20 @@ import {
   Command,
   HandCoins,
   Plus,
-  Receipt,
   ScanLine,
-  Tag,
-  Wallet,
 } from "lucide-react"
 import { toast } from "sonner"
 import type { RowSelectionState } from "@tanstack/react-table"
+import dynamic from "next/dynamic"
 
 import { useTransactions } from "@/hooks/use-transactions"
 import { useParticipants } from "@/hooks/use-participants"
 import { useMonthlyIncomes } from "@/hooks/use-monthly-incomes"
 import { useSessionUser } from "@/hooks/use-session-user"
+import { useDashboardData } from "@/hooks/use-dashboard-data"
+import { useHotkeys } from "@/hooks/use-hotkeys"
 
 import { isAdminUser } from "@/lib/constants"
-import {
-  applyQuickRange,
-  computeDashboardMetrics,
-} from "@/lib/v2/dashboard-metrics"
 import {
   bulkSoftDelete,
   bulkUpdate,
@@ -37,16 +33,8 @@ import {
 
 import { Button } from "@/components/v2/primitives/button"
 import { Skeleton } from "@/components/v2/primitives/skeleton"
-import { MetricCard } from "@/components/v2/finance/metric-card"
-import { BalanceCard } from "@/components/v2/finance/balance-card"
-import { BalanceChart } from "@/components/v2/charts/balance-chart"
-import { CategoryPieChart } from "@/components/v2/charts/category-pie-chart"
-import { LazyMount } from "@/components/v2/charts/lazy-mount"
-import { TransactionsTable } from "@/components/v2/transactions/transactions-table"
-import {
-  TransactionsToolbar,
-  type TransactionsToolbarValue,
-} from "@/components/v2/transactions/transactions-toolbar"
+import { DashboardOverview } from "@/components/v2/finance/dashboard-overview"
+import { TransactionsWorkspace } from "@/components/v2/transactions/transactions-workspace"
 import { TransactionSheet } from "@/components/v2/transactions/transaction-sheet"
 import { TransactionRowActions } from "@/components/v2/transactions/transaction-row-actions"
 import { DeleteTransactionDialog } from "@/components/v2/transactions/delete-transaction-dialog"
@@ -56,7 +44,13 @@ import {
   BulkAdvancedEditDialog,
   BulkQuickEditDialog,
 } from "@/components/v2/transactions/bulk-edit-dialogs"
-import dynamic from "next/dynamic"
+import { PendingRequests } from "@/components/v2/transactions/pending-requests"
+import {
+  RequestDialog,
+  type RequestPayload,
+} from "@/components/v2/transactions/request-dialog"
+import { Fab } from "@/components/v2/layout/fab"
+import type { Tables } from "@/lib/database.types"
 
 const ReceiptAnalyzeSheet = dynamic(
   () =>
@@ -65,16 +59,6 @@ const ReceiptAnalyzeSheet = dynamic(
     ),
   { ssr: false }
 )
-import { PendingRequests } from "@/components/v2/transactions/pending-requests"
-import {
-  RequestDialog,
-  type RequestPayload,
-} from "@/components/v2/transactions/request-dialog"
-import { MobileTransactionsList } from "@/components/v2/transactions/mobile-transactions-list"
-import { MobileFiltersSheet } from "@/components/v2/transactions/mobile-filters-sheet"
-import { Fab } from "@/components/v2/layout/fab"
-import { useHotkeys } from "@/hooks/use-hotkeys"
-import type { Tables } from "@/lib/database.types"
 
 type Transaction = Tables<"shared_transactions">
 
@@ -83,31 +67,6 @@ function getGreeting() {
   if (h < 12) return "Bom dia"
   if (h < 18) return "Boa tarde"
   return "Boa noite"
-}
-
-/**
- * Count the number of days in the effective period (inclusive). Falls back to
- * the full transaction range when no filter is set. Returns at least 1 if
- * there is any data, to avoid divide-by-zero in averages.
- */
-function daysInPeriod(
-  filters: { start?: string; end?: string },
-  fullRange: { min: string; max: string }
-): number {
-  const start = filters.start || fullRange.min
-  const end = filters.end || fullRange.max
-  if (!start || !end) return 0
-  const s = new Date(start).getTime()
-  const e = new Date(end).getTime()
-  if (Number.isNaN(s) || Number.isNaN(e) || e < s) return 0
-  return Math.max(1, Math.floor((e - s) / 86_400_000) + 1)
-}
-
-const EMPTY_TOOLBAR: TransactionsToolbarValue = {
-  search: "",
-  start: "",
-  end: "",
-  activeRange: null,
 }
 
 type SheetMode = null | "create" | { kind: "edit"; transaction: Transaction }
@@ -127,7 +86,23 @@ export default function DashboardPage() {
   } = useParticipants()
   const { incomes, loading: incLoading } = useMonthlyIncomes()
 
-  const [toolbar, setToolbar] = React.useState<TransactionsToolbarValue>(EMPTY_TOOLBAR)
+  const memberNames = React.useMemo(() => members.map((m) => m.name), [members])
+  const isAdmin = isAdminUser(user)
+
+  const {
+    toolbar,
+    setToolbar,
+    fullDateRange,
+    effectiveFilters,
+    metrics,
+    daysInPeriod,
+  } = useDashboardData({
+    transactions,
+    monthlyIncomes: incomes,
+    memberNames,
+    currentUser: user,
+  })
+
   const [sheetMode, setSheetMode] = React.useState<SheetMode>(null)
   const [pendingDelete, setPendingDelete] = React.useState<Transaction | null>(null)
   const [deleting, setDeleting] = React.useState(false)
@@ -141,9 +116,6 @@ export default function DashboardPage() {
   const [markingPaidIds, setMarkingPaidIds] = React.useState<Set<string>>(
     () => new Set()
   )
-
-  const memberNames = React.useMemo(() => members.map((m) => m.name), [members])
-  const isAdmin = isAdminUser(user)
 
   useHotkeys(
     React.useMemo(
@@ -172,45 +144,14 @@ export default function DashboardPage() {
     )
   )
 
-  const fullDateRange = React.useMemo(() => {
-    if (transactions.length === 0) return { min: "", max: "" }
-    const dates = transactions.map((t) => t.date).sort()
-    return { min: dates[0], max: dates[dates.length - 1] }
-  }, [transactions])
-
-  const effectiveFilters = React.useMemo(() => {
-    if (toolbar.activeRange) {
-      const r = applyQuickRange(fullDateRange, toolbar.activeRange)
-      return { search: toolbar.search, start: r.start, end: r.end }
-    }
-    return {
-      search: toolbar.search,
-      start: toolbar.start || undefined,
-      end: toolbar.end || undefined,
-    }
-  }, [toolbar, fullDateRange])
-
-  const metrics = React.useMemo(() => {
-    if (!user) return null
-    return computeDashboardMetrics({
-      transactions,
-      monthlyIncomes: incomes,
-      memberNames,
-      currentUser: user,
-      filters: effectiveFilters,
-    })
-  }, [user, transactions, incomes, memberNames, effectiveFilters])
-
   // Show the skeleton only until ALL caches have finished their first load.
-  // After that, background refetches (bulk delete, edit, etc.) keep the page
-  // interactive instead of flickering back to the skeleton.
+  // After that, background refetches keep the page interactive.
   const initialLoadComplete =
     !!user && !txLoading && !pLoading && !incLoading && !!metrics
   const hasShownContentRef = React.useRef(false)
   if (initialLoadComplete) hasShownContentRef.current = true
   const isLoading = !hasShownContentRef.current
 
-  // ── Selection helpers ─────────────────────────────────────────────────────
   const selectedIds = React.useMemo(
     () => Object.keys(rowSelection).filter((id) => rowSelection[id]),
     [rowSelection]
@@ -229,7 +170,6 @@ export default function DashboardPage() {
     if (stale) setRowSelection(next)
   }, [metrics?.filteredTransactions, selectedIds])
 
-  // ── Mutations ────────────────────────────────────────────────────────────
   const handleCreate = async (
     values: Omit<CreatePayload, "currentUser">
   ) => {
@@ -405,7 +345,6 @@ export default function DashboardPage() {
     )
   }
 
-  // ── Render ──────────────────────────────────────────────────────────────
   const defaultParticipants = React.useMemo(
     () => participants.map((p) => p.name),
     [participants]
@@ -464,122 +403,12 @@ export default function DashboardPage() {
         <DashboardSkeleton />
       ) : (
         <>
-          <BalanceCard totalBalance={metrics!.totalBalance} />
-
-          <section className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 md:mx-0 md:grid md:grid-cols-4 md:gap-4 md:overflow-visible md:px-0 md:pb-0 [&>*]:min-w-[78%] [&>*]:snap-start md:[&>*]:min-w-0">
-            <MetricCard
-              label="Gastos no período"
-              value={metrics!.periodStats.totalSpend}
-              icon={<Receipt />}
-              hint={`${metrics!.periodStats.transactionCount} transações`}
-            />
-            <MetricCard
-              label="Você pagou"
-              value={metrics!.periodStats.mySpend}
-              icon={<Wallet />}
-              hint={
-                metrics!.periodStats.totalSpend > 0
-                  ? `${Math.round(
-                      (metrics!.periodStats.mySpend /
-                        metrics!.periodStats.totalSpend) *
-                        100
-                    )}% do total`
-                  : "Sem transações no período"
-              }
-            />
-            <MetricCard
-              label="Top categoria"
-              icon={<Tag />}
-              hint={
-                metrics!.topCategory && metrics!.periodStats.totalSpend > 0
-                  ? `${new Intl.NumberFormat("pt-BR", {
-                      style: "currency",
-                      currency: "BRL",
-                    }).format(metrics!.topCategory.total)} · ${Math.round(
-                      (metrics!.topCategory.total /
-                        metrics!.periodStats.totalSpend) *
-                        100
-                    )}% do total`
-                  : "Sem dados no período"
-              }
-            >
-              <span
-                className="truncate font-display text-3xl font-semibold"
-                title={metrics!.topCategory?.category}
-              >
-                {metrics!.topCategory?.category ?? "—"}
-              </span>
-            </MetricCard>
-            <MetricCard
-              label="Média diária"
-              icon={<Receipt />}
-              value={(() => {
-                const days = daysInPeriod(effectiveFilters, fullDateRange)
-                return days > 0 ? metrics!.periodStats.totalSpend / days : 0
-              })()}
-              hint={(() => {
-                const days = daysInPeriod(effectiveFilters, fullDateRange)
-                return days > 0
-                  ? `Em ${days} ${days === 1 ? "dia" : "dias"} do período`
-                  : "Sem período definido"
-              })()}
-            />
-          </section>
-
-          <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <LazyMount minHeight={300}>
-              <CategoryPieChart
-                title="Você por categoria"
-                description="Gastos pagos por você no período"
-                data={metrics!.categoryTotals}
-                drilldownFor={(category) =>
-                  metrics!.filteredTransactions
-                    .filter(
-                      (t) =>
-                        t.paid_by === user &&
-                        (t.category?.trim() || "Sem categoria") === category
-                    )
-                    .sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0))
-                    .slice(0, 8)
-                    .map((t) => ({
-                      category:
-                        t.description?.trim() || "Sem descrição",
-                      total: t.amount ?? 0,
-                    }))
-                }
-              />
-            </LazyMount>
-            <LazyMount minHeight={300}>
-              <CategoryPieChart
-                title="Grupo por categoria"
-                description="Todas as transações em que você está envolvido"
-                data={metrics!.globalCategoryTotals}
-                drilldownFor={(category) =>
-                  metrics!.filteredTransactions
-                    .filter(
-                      (t) =>
-                        (t.category?.trim() || "Sem categoria") === category
-                    )
-                    .sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0))
-                    .slice(0, 8)
-                    .map((t) => ({
-                      category:
-                        t.description?.trim() || "Sem descrição",
-                      total: t.amount ?? 0,
-                    }))
-                }
-              />
-            </LazyMount>
-          </section>
-
-          <LazyMount minHeight={336}>
-            <BalanceChart
-              series={metrics!.chartSeries}
-              dailyBreakdown={metrics!.dailyBreakdown}
-              startDate={effectiveFilters.start}
-              endDate={effectiveFilters.end}
-            />
-          </LazyMount>
+          <DashboardOverview
+            metrics={metrics!}
+            currentUser={user!}
+            effectiveFilters={effectiveFilters}
+            daysInPeriod={daysInPeriod}
+          />
 
           <PendingRequests
             requests={metrics!.pendingRequests}
@@ -589,55 +418,31 @@ export default function DashboardPage() {
             onCreate={() => setRequestOpen(true)}
           />
 
-          <section className="flex flex-col gap-3">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <h2 className="text-base font-semibold">Transações</h2>
-                <p className="text-xs text-muted-foreground">
-                  Todas as transações visíveis para você no período.
-                </p>
+          <TransactionsWorkspace
+            transactions={metrics!.filteredTransactions}
+            participants={participants}
+            toolbar={toolbar}
+            onToolbarChange={setToolbar}
+            disabledQuickRange={!fullDateRange.max}
+            enableSelection
+            rowSelection={rowSelection}
+            onRowSelectionChange={setRowSelection}
+            rowActions={rowActionsRenderer}
+            onRowClick={(t) => setSheetMode({ kind: "edit", transaction: t })}
+            heading={
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-semibold">Transações</h2>
+                  <p className="text-xs text-muted-foreground">
+                    Todas as transações visíveis para você no período.
+                  </p>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <TransactionsToolbar
-                value={toolbar}
-                onChange={setToolbar}
-                disabledQuickRange={!fullDateRange.max}
-                className="flex-1"
-              />
-              <MobileFiltersSheet value={toolbar} onChange={setToolbar} />
-            </div>
-            <div className="hidden md:block">
-              <TransactionsTable
-                transactions={metrics!.filteredTransactions}
-                participants={participants}
-                enableSelection
-                rowSelection={rowSelection}
-                onRowSelectionChange={setRowSelection}
-                rowActions={rowActionsRenderer}
-              />
-            </div>
-            <div className="md:hidden">
-              <MobileTransactionsList
-                transactions={metrics!.filteredTransactions}
-                participants={participants}
-                selection={rowSelection as Record<string, boolean>}
-                onToggleSelect={(id, next) =>
-                  setRowSelection((prev) => {
-                    const out = { ...prev }
-                    if (next) out[id] = true
-                    else delete out[id]
-                    return out
-                  })
-                }
-                onRowClick={(t) => setSheetMode({ kind: "edit", transaction: t })}
-              />
-            </div>
-          </section>
+            }
+          />
         </>
       )}
 
-      {/* Floating bulk actions */}
       <BulkActionsBar
         count={selectedIds.length}
         onQuickEdit={() => setBulkQuickEditOpen(true)}
@@ -646,7 +451,6 @@ export default function DashboardPage() {
         onClear={() => setRowSelection({})}
       />
 
-      {/* Create / edit sheet */}
       <TransactionSheet
         open={sheetMode !== null}
         onOpenChange={(o) => {
@@ -673,7 +477,6 @@ export default function DashboardPage() {
         }}
       />
 
-      {/* Single row delete */}
       <DeleteTransactionDialog
         open={pendingDelete !== null}
         onOpenChange={(o) => {
@@ -684,7 +487,6 @@ export default function DashboardPage() {
         onConfirm={handleDelete}
       />
 
-      {/* Bulk delete */}
       <DeleteTransactionDialog
         open={bulkDeleteOpen}
         onOpenChange={setBulkDeleteOpen}
@@ -693,7 +495,6 @@ export default function DashboardPage() {
         onConfirm={handleBulkDelete}
       />
 
-      {/* Bulk quick edit */}
       <BulkQuickEditDialog
         open={bulkQuickEditOpen}
         onOpenChange={setBulkQuickEditOpen}
@@ -702,7 +503,6 @@ export default function DashboardPage() {
         onConfirm={handleBulkQuickEdit}
       />
 
-      {/* Bulk advanced edit */}
       <BulkAdvancedEditDialog
         open={bulkAdvancedOpen}
         onOpenChange={setBulkAdvancedOpen}
@@ -711,14 +511,12 @@ export default function DashboardPage() {
         onConfirm={handleBulkAdvancedEdit}
       />
 
-      {/* Request payment dialog */}
       <RequestDialog
         open={requestOpen}
         onOpenChange={setRequestOpen}
         onSubmit={handleCreateRequest}
       />
 
-      {/* Receipt OCR sheet */}
       <ReceiptAnalyzeSheet
         open={receiptOpen}
         onOpenChange={setReceiptOpen}
@@ -726,7 +524,6 @@ export default function DashboardPage() {
         onSaved={handleReceiptSaved}
       />
 
-      {/* Cmd+K palette — IA Q&A */}
       {user && (
         <QuickAdd
           currentUser={user}
@@ -734,7 +531,6 @@ export default function DashboardPage() {
         />
       )}
 
-      {/* Mobile floating action button */}
       <Fab onClick={() => setSheetMode("create")} aria-label="Nova transação" />
     </div>
   )

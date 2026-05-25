@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseClient } from "@/lib/supabase"
-import { simplifyDebts } from "@/lib/debt-simplification"
-import { buildIncomeMap } from "@/lib/proportional-split"
 
 export async function GET(
   _req: NextRequest,
@@ -32,14 +30,22 @@ export async function GET(
     return NextResponse.json({ error: "Participante arquivado" }, { status: 404 })
   }
 
-  const { data: members, error: membersError } = await supabase
+  // Active participants (members + non-archived guests) — needed for the
+  // rich dashboard so badges/avatars/pies can color by participant.
+  const { data: participants, error: participantsError } = await supabase
     .from("participants")
-    .select("id,name,color,kind,is_archived")
-    .eq("kind", "member")
+    .select("id,name,color,kind,is_archived,created_at")
     .eq("is_archived", false)
     .order("name")
-  if (membersError) return NextResponse.json({ error: membersError.message }, { status: 500 })
+  if (participantsError) {
+    return NextResponse.json({ error: participantsError.message }, { status: 500 })
+  }
 
+  const members = (participants ?? []).filter((p) => p.kind === "member")
+
+  // Return the FULL transactions set (minus hidden). `computeDashboardMetrics`
+  // does its own visibility filter from `currentUser`, and needs the full set
+  // to render the debt simplification and chart series correctly.
   const { data: rawTransactions, error: txError } = await supabase
     .from("shared_transactions")
     .select("*")
@@ -47,29 +53,18 @@ export async function GET(
     .order("date", { ascending: false })
   if (txError) return NextResponse.json({ error: txError.message }, { status: 500 })
 
-  const all = rawTransactions ?? []
-  const visibleTransactions = all.filter(t =>
-    t.paid_by === participant.name || (t.participants ?? []).includes(participant.name)
-  )
-
-  const { data: incomes } = await supabase.from("monthly_incomes").select("*")
-  const months = Array.from(new Set(all.map(t => t.date.slice(0, 7))))
-  const incomeMap = buildIncomeMap(incomes ?? [], months)
-
-  const debtInputs = all.map(t => ({
-    paid_by: t.paid_by,
-    amount: t.amount ?? 0,
-    participants: t.participants ?? [],
-    date: t.date,
-    custom_shares: (t.custom_shares as Record<string, number> | null) ?? null,
-  }))
-  const allDebts = simplifyDebts(debtInputs, incomeMap)
-  const myDebts = allDebts.filter(d => d.from === participant.name || d.to === participant.name)
+  const { data: incomes, error: incomesError } = await supabase
+    .from("monthly_incomes")
+    .select("*")
+  if (incomesError) {
+    return NextResponse.json({ error: incomesError.message }, { status: 500 })
+  }
 
   return NextResponse.json({
     participant,
     members,
-    transactions: visibleTransactions,
-    debts: myDebts,
+    participants: participants ?? [],
+    transactions: rawTransactions ?? [],
+    monthlyIncomes: incomes ?? [],
   })
 }

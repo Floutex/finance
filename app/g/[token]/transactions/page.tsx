@@ -6,24 +6,16 @@ import { HandCoins } from "lucide-react"
 import { useDashboardData } from "@/hooks/use-dashboard-data"
 
 import { Button } from "@/components/v2/primitives/button"
-import { DashboardOverview } from "@/components/v2/finance/dashboard-overview"
 import { TransactionsWorkspace } from "@/components/v2/transactions/transactions-workspace"
 import { GuestPaybackDialog } from "@/components/v2/guest/guest-payback-dialog"
 import { useGuestContext } from "@/components/v2/guest/guest-context"
 
-export default function GuestDashboardPage() {
+export default function GuestTransactionsPage() {
   const { token, state, refresh } = useGuestContext()
   const { participant, members, participants, transactions, monthlyIncomes } = state
 
   const memberNames = React.useMemo(() => members.map((m) => m.name), [members])
-  const {
-    toolbar,
-    setToolbar,
-    fullDateRange,
-    effectiveFilters,
-    metrics,
-    daysInPeriod,
-  } = useDashboardData({
+  const { toolbar, setToolbar, fullDateRange, metrics } = useDashboardData({
     transactions,
     monthlyIncomes,
     memberNames,
@@ -39,11 +31,14 @@ export default function GuestDashboardPage() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-1">
           <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Dashboard
+            Transações
           </p>
           <h2 className="font-display text-2xl font-semibold tracking-tight md:text-3xl">
-            Visão geral
+            Todas as transações
           </h2>
+          <p className="text-sm text-muted-foreground">
+            {metrics.filteredTransactions.length} de {metrics.userTransactions.length} visíveis
+          </p>
         </div>
         <Button onClick={() => setPaybackOpen(true)}>
           <HandCoins />
@@ -51,27 +46,14 @@ export default function GuestDashboardPage() {
         </Button>
       </div>
 
-      <DashboardOverview
-        metrics={metrics}
-        currentUser={participant.name}
-        effectiveFilters={effectiveFilters}
-        daysInPeriod={daysInPeriod}
-      />
-
       <TransactionsWorkspace
         transactions={metrics.filteredTransactions}
         participants={participants}
         toolbar={toolbar}
         onToolbarChange={setToolbar}
         disabledQuickRange={!fullDateRange.max}
-        heading={
-          <div>
-            <h2 className="text-base font-semibold">Transações</h2>
-            <p className="text-xs text-muted-foreground">
-              Todas as transações em que você aparece no período.
-            </p>
-          </div>
-        }
+        pageSize={50}
+        mobilePageSize={30}
       />
 
       <GuestPaybackDialog

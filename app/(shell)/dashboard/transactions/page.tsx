@@ -10,13 +10,10 @@ import { useTransactions } from "@/hooks/use-transactions"
 import { useParticipants } from "@/hooks/use-participants"
 import { useMonthlyIncomes } from "@/hooks/use-monthly-incomes"
 import { useSessionUser } from "@/hooks/use-session-user"
+import { useDashboardData } from "@/hooks/use-dashboard-data"
 import { useHotkeys } from "@/hooks/use-hotkeys"
 
 import { isAdminUser } from "@/lib/constants"
-import {
-  applyQuickRange,
-  computeDashboardMetrics,
-} from "@/lib/v2/dashboard-metrics"
 import {
   bulkSoftDelete,
   bulkUpdate,
@@ -30,11 +27,7 @@ import {
 
 import { Button } from "@/components/v2/primitives/button"
 import { Skeleton } from "@/components/v2/primitives/skeleton"
-import { TransactionsTable } from "@/components/v2/transactions/transactions-table"
-import {
-  TransactionsToolbar,
-  type TransactionsToolbarValue,
-} from "@/components/v2/transactions/transactions-toolbar"
+import { TransactionsWorkspace } from "@/components/v2/transactions/transactions-workspace"
 import { TransactionSheet } from "@/components/v2/transactions/transaction-sheet"
 import { TransactionRowActions } from "@/components/v2/transactions/transaction-row-actions"
 import { DeleteTransactionDialog } from "@/components/v2/transactions/delete-transaction-dialog"
@@ -48,8 +41,6 @@ import {
   RequestDialog,
   type RequestPayload,
 } from "@/components/v2/transactions/request-dialog"
-import { MobileTransactionsList } from "@/components/v2/transactions/mobile-transactions-list"
-import { MobileFiltersSheet } from "@/components/v2/transactions/mobile-filters-sheet"
 import { Fab } from "@/components/v2/layout/fab"
 import type { Tables } from "@/lib/database.types"
 
@@ -63,20 +54,8 @@ const ReceiptAnalyzeSheet = dynamic(
 
 type Transaction = Tables<"shared_transactions">
 
-const EMPTY_TOOLBAR: TransactionsToolbarValue = {
-  search: "",
-  start: "",
-  end: "",
-  activeRange: null,
-}
-
 type SheetMode = null | "create" | { kind: "edit"; transaction: Transaction }
 
-/**
- * Dedicated transactions workspace — sem métricas/charts/balance card. A ideia
- * é dar uma tela densa pra quem quer trabalhar a lista (sort, filter, bulk,
- * navegação por teclado). Mesma stack de componentes do dashboard.
- */
 export default function TransactionsPage() {
   const user = useSessionUser()
   const {
@@ -92,7 +71,18 @@ export default function TransactionsPage() {
   } = useParticipants()
   const { incomes, loading: incLoading } = useMonthlyIncomes()
 
-  const [toolbar, setToolbar] = React.useState<TransactionsToolbarValue>(EMPTY_TOOLBAR)
+  const memberNames = React.useMemo(() => members.map((m) => m.name), [members])
+  const isAdmin = isAdminUser(user)
+
+  const [viewAll, setViewAll] = React.useState(false)
+  const { toolbar, setToolbar, fullDateRange, metrics } = useDashboardData({
+    transactions,
+    monthlyIncomes: incomes,
+    memberNames,
+    currentUser: user,
+    viewAll,
+  })
+
   const [sheetMode, setSheetMode] = React.useState<SheetMode>(null)
   const [pendingDelete, setPendingDelete] = React.useState<Transaction | null>(null)
   const [deleting, setDeleting] = React.useState(false)
@@ -103,10 +93,6 @@ export default function TransactionsPage() {
   const [bulkPending, setBulkPending] = React.useState(false)
   const [receiptOpen, setReceiptOpen] = React.useState(false)
   const [requestOpen, setRequestOpen] = React.useState(false)
-  const [viewAll, setViewAll] = React.useState(false)
-
-  const memberNames = React.useMemo(() => members.map((m) => m.name), [members])
-  const isAdmin = isAdminUser(user)
 
   useHotkeys(
     React.useMemo(
@@ -135,38 +121,6 @@ export default function TransactionsPage() {
     )
   )
 
-  const fullDateRange = React.useMemo(() => {
-    if (transactions.length === 0) return { min: "", max: "" }
-    const dates = transactions.map((t) => t.date).sort()
-    return { min: dates[0], max: dates[dates.length - 1] }
-  }, [transactions])
-
-  const effectiveFilters = React.useMemo(() => {
-    if (toolbar.activeRange) {
-      const r = applyQuickRange(fullDateRange, toolbar.activeRange)
-      return { search: toolbar.search, start: r.start, end: r.end }
-    }
-    return {
-      search: toolbar.search,
-      start: toolbar.start || undefined,
-      end: toolbar.end || undefined,
-    }
-  }, [toolbar, fullDateRange])
-
-  const metrics = React.useMemo(() => {
-    if (!user) return null
-    return computeDashboardMetrics({
-      transactions,
-      monthlyIncomes: incomes,
-      memberNames,
-      currentUser: user,
-      filters: effectiveFilters,
-      viewAll,
-    })
-  }, [user, transactions, incomes, memberNames, effectiveFilters, viewAll])
-
-  // Show the skeleton only until ALL caches finish their first load. After
-  // that, background refetches keep the page interactive.
   const initialLoadComplete =
     !!user && !txLoading && !pLoading && !incLoading && !!metrics
   const hasShownContentRef = React.useRef(false)
@@ -406,47 +360,20 @@ export default function TransactionsPage() {
           <Skeleton className="h-[600px] w-full rounded-xl" />
         </div>
       ) : (
-        <section className="flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-2">
-            <TransactionsToolbar
-              value={toolbar}
-              onChange={setToolbar}
-              disabledQuickRange={!fullDateRange.max}
-              className="flex-1"
-            />
-            <MobileFiltersSheet value={toolbar} onChange={setToolbar} />
-          </div>
-          <div className="hidden md:block">
-            <TransactionsTable
-              transactions={metrics!.filteredTransactions}
-              participants={participants}
-              enableSelection
-              rowSelection={rowSelection}
-              onRowSelectionChange={setRowSelection}
-              rowActions={rowActionsRenderer}
-              pageSize={50}
-            />
-          </div>
-          <div className="md:hidden">
-            <MobileTransactionsList
-              transactions={metrics!.filteredTransactions}
-              participants={participants}
-              selection={rowSelection as Record<string, boolean>}
-              onToggleSelect={(id, next) =>
-                setRowSelection((prev) => {
-                  const out = { ...prev }
-                  if (next) out[id] = true
-                  else delete out[id]
-                  return out
-                })
-              }
-              onRowClick={(t) =>
-                setSheetMode({ kind: "edit", transaction: t })
-              }
-              pageSize={30}
-            />
-          </div>
-        </section>
+        <TransactionsWorkspace
+          transactions={metrics!.filteredTransactions}
+          participants={participants}
+          toolbar={toolbar}
+          onToolbarChange={setToolbar}
+          disabledQuickRange={!fullDateRange.max}
+          enableSelection
+          rowSelection={rowSelection}
+          onRowSelectionChange={setRowSelection}
+          rowActions={rowActionsRenderer}
+          onRowClick={(t) => setSheetMode({ kind: "edit", transaction: t })}
+          pageSize={50}
+          mobilePageSize={30}
+        />
       )}
 
       <BulkActionsBar
