@@ -1,13 +1,7 @@
 "use client"
 
 import * as React from "react"
-import {
-  Command,
-  HandCoins,
-  Plus,
-  ScanLine,
-} from "lucide-react"
-import { toast } from "sonner"
+import { Command, HandCoins, Plus, ScanLine } from "lucide-react"
 import type { RowSelectionState } from "@tanstack/react-table"
 import dynamic from "next/dynamic"
 
@@ -16,20 +10,10 @@ import { useParticipants } from "@/hooks/use-participants"
 import { useMonthlyIncomes } from "@/hooks/use-monthly-incomes"
 import { useSessionUser } from "@/hooks/use-session-user"
 import { useDashboardData } from "@/hooks/use-dashboard-data"
+import { useDashboardMutations } from "@/hooks/use-dashboard-mutations"
 import { useHotkeys } from "@/hooks/use-hotkeys"
 
 import { isAdminUser } from "@/lib/constants"
-import {
-  bulkSoftDelete,
-  bulkUpdate,
-  createPendingRequest,
-  createTransaction,
-  markRequestPaid,
-  softDeleteTransaction,
-  updateTransaction,
-  type CreatePayload,
-  type CreatePendingRequestPayload,
-} from "@/lib/v2/transaction-mutations"
 
 import { Button } from "@/components/v2/primitives/button"
 import { Skeleton } from "@/components/v2/primitives/skeleton"
@@ -45,10 +29,7 @@ import {
   BulkQuickEditDialog,
 } from "@/components/v2/transactions/bulk-edit-dialogs"
 import { PendingRequests } from "@/components/v2/transactions/pending-requests"
-import {
-  RequestDialog,
-  type RequestPayload,
-} from "@/components/v2/transactions/request-dialog"
+import { RequestDialog } from "@/components/v2/transactions/request-dialog"
 import { Fab } from "@/components/v2/layout/fab"
 import type { Tables } from "@/lib/database.types"
 
@@ -69,7 +50,11 @@ function getGreeting() {
   return "Boa noite"
 }
 
-type SheetMode = null | "create" | { kind: "edit"; transaction: Transaction }
+function triggerCmdK() {
+  window.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "k", metaKey: true, ctrlKey: true })
+  )
+}
 
 export default function DashboardPage() {
   const user = useSessionUser()
@@ -103,19 +88,21 @@ export default function DashboardPage() {
     currentUser: user,
   })
 
-  const [sheetMode, setSheetMode] = React.useState<SheetMode>(null)
-  const [pendingDelete, setPendingDelete] = React.useState<Transaction | null>(null)
-  const [deleting, setDeleting] = React.useState(false)
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({})
-  const [bulkDeleteOpen, setBulkDeleteOpen] = React.useState(false)
-  const [bulkQuickEditOpen, setBulkQuickEditOpen] = React.useState(false)
-  const [bulkAdvancedOpen, setBulkAdvancedOpen] = React.useState(false)
-  const [bulkPending, setBulkPending] = React.useState(false)
-  const [receiptOpen, setReceiptOpen] = React.useState(false)
-  const [requestOpen, setRequestOpen] = React.useState(false)
-  const [markingPaidIds, setMarkingPaidIds] = React.useState<Set<string>>(
-    () => new Set()
+  const selectedIds = React.useMemo(
+    () => Object.keys(rowSelection).filter((id) => rowSelection[id]),
+    [rowSelection]
   )
+
+  const m = useDashboardMutations({
+    currentUser: user,
+    isAdmin,
+    filteredTransactions: metrics?.filteredTransactions,
+    selectedIds,
+    updateCache,
+    reload: reloadTransactions,
+    setRowSelection,
+  })
 
   useHotkeys(
     React.useMemo(
@@ -124,7 +111,7 @@ export default function DashboardPage() {
           key: "n",
           handler: (e) => {
             e.preventDefault()
-            setSheetMode("create")
+            m.setSheetMode("create")
           },
         },
         {
@@ -140,22 +127,16 @@ export default function DashboardPage() {
           },
         },
       ],
-      []
+      [m]
     )
   )
 
   // Show the skeleton only until ALL caches have finished their first load.
-  // After that, background refetches keep the page interactive.
   const initialLoadComplete =
     !!user && !txLoading && !pLoading && !incLoading && !!metrics
   const hasShownContentRef = React.useRef(false)
   if (initialLoadComplete) hasShownContentRef.current = true
   const isLoading = !hasShownContentRef.current
-
-  const selectedIds = React.useMemo(
-    () => Object.keys(rowSelection).filter((id) => rowSelection[id]),
-    [rowSelection]
-  )
 
   // Drop selections that no longer exist (filters changed, etc.).
   React.useEffect(() => {
@@ -170,181 +151,6 @@ export default function DashboardPage() {
     if (stale) setRowSelection(next)
   }, [metrics?.filteredTransactions, selectedIds])
 
-  const handleCreate = async (
-    values: Omit<CreatePayload, "currentUser">
-  ) => {
-    if (!user) return
-    try {
-      const created = await createTransaction({ ...values, currentUser: user })
-      updateCache((prev) => [created, ...prev])
-      toast.success("Transação criada.")
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Falha ao criar.")
-      throw e
-    }
-  }
-
-  const handleEdit = async (
-    id: string,
-    values: Omit<CreatePayload, "currentUser">
-  ) => {
-    if (!user) return
-    try {
-      const updated = await updateTransaction({ ...values, id, currentUser: user })
-      updateCache((prev) => prev.map((t) => (t.id === id ? updated : t)))
-      toast.success("Transação atualizada.")
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Falha ao atualizar.")
-      throw e
-    }
-  }
-
-  const handleDelete = async () => {
-    if (!user || !pendingDelete) return
-    if (!isAdmin && pendingDelete.paid_by !== user) {
-      toast.error("Você só pode deletar transações que você pagou.")
-      setPendingDelete(null)
-      return
-    }
-    setDeleting(true)
-    try {
-      await softDeleteTransaction(pendingDelete.id, user)
-      updateCache((prev) => prev.filter((t) => t.id !== pendingDelete.id))
-      setRowSelection((prev) => {
-        const next = { ...prev }
-        delete next[pendingDelete.id]
-        return next
-      })
-      toast.success("Transação excluída.")
-      setPendingDelete(null)
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Falha ao excluir.")
-    } finally {
-      setDeleting(false)
-    }
-  }
-
-  const handleBulkDelete = async () => {
-    if (!user) return
-    const unauthorized = metrics?.filteredTransactions.filter(
-      (t) => selectedIds.includes(t.id) && !isAdmin && t.paid_by !== user
-    )
-    if (unauthorized && unauthorized.length > 0) {
-      toast.error(
-        `Você não pode excluir ${unauthorized.length} transações (não foi você quem pagou).`
-      )
-      return
-    }
-    setBulkPending(true)
-    try {
-      await bulkSoftDelete(selectedIds, user)
-      await reloadTransactions()
-      setRowSelection({})
-      toast.success(`${selectedIds.length} transações excluídas.`)
-      setBulkDeleteOpen(false)
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Falha no bulk delete.")
-    } finally {
-      setBulkPending(false)
-    }
-  }
-
-  const handleBulkQuickEdit = async (input: {
-    field: "category" | "paid_by"
-    value: string
-  }) => {
-    if (!user) return
-    setBulkPending(true)
-    try {
-      const values: Record<string, string | null> = {}
-      if (input.field === "category") {
-        values.category = input.value.trim() || null
-      } else {
-        values.paid_by = input.value.trim()
-      }
-      await bulkUpdate(selectedIds, values as any, user)
-      await reloadTransactions()
-      setRowSelection({})
-      toast.success("Transações atualizadas.")
-      setBulkQuickEditOpen(false)
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Falha no bulk update.")
-    } finally {
-      setBulkPending(false)
-    }
-  }
-
-  const handleBulkAdvancedEdit = async (input: {
-    category?: string
-    paid_by?: string
-    date?: string
-  }) => {
-    if (!user) return
-    setBulkPending(true)
-    try {
-      const values: Record<string, unknown> = {}
-      if (input.category) values.category = input.category
-      if (input.paid_by) values.paid_by = input.paid_by
-      if (input.date) values.date = input.date
-      await bulkUpdate(selectedIds, values as any, user)
-      await reloadTransactions()
-      setRowSelection({})
-      toast.success("Transações atualizadas.")
-      setBulkAdvancedOpen(false)
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Falha no bulk update.")
-    } finally {
-      setBulkPending(false)
-    }
-  }
-
-  const handleCreateRequest = async (payload: RequestPayload) => {
-    if (!user) return
-    try {
-      const created = await createPendingRequest({
-        ...payload,
-        currentUser: user,
-      } as CreatePendingRequestPayload)
-      updateCache((prev) => [created, ...prev])
-      toast.success("Solicitação enviada.")
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Falha ao enviar solicitação.")
-    }
-  }
-
-  const handleMarkPaid = async (transaction: Transaction) => {
-    if (!user) return
-    setMarkingPaidIds((prev) => {
-      const next = new Set(prev)
-      next.add(transaction.id)
-      return next
-    })
-    try {
-      const updated = await markRequestPaid(transaction.id, user)
-      updateCache((prev) =>
-        prev.map((t) => (t.id === transaction.id ? updated : t))
-      )
-      toast.success("Cobrança marcada como paga.")
-    } catch (e) {
-      toast.error(
-        e instanceof Error ? e.message : "Falha ao marcar como pago."
-      )
-    } finally {
-      setMarkingPaidIds((prev) => {
-        const next = new Set(prev)
-        next.delete(transaction.id)
-        return next
-      })
-    }
-  }
-
-  const handleReceiptSaved = (created: Transaction[]) => {
-    updateCache((prev) => [...created, ...prev])
-    toast.success(
-      `${created.length} ${created.length === 1 ? "transação criada" : "transações criadas"} a partir do recibo.`
-    )
-  }
-
   const defaultParticipants = React.useMemo(
     () => participants.map((p) => p.name),
     [participants]
@@ -356,12 +162,12 @@ export default function DashboardPage() {
         transaction={t}
         canDelete={isAdmin || t.paid_by === user}
         onEdit={(transaction) =>
-          setSheetMode({ kind: "edit", transaction })
+          m.setSheetMode({ kind: "edit", transaction })
         }
-        onDelete={(transaction) => setPendingDelete(transaction)}
+        onDelete={(transaction) => m.setPendingDelete(transaction)}
       />
     ),
-    [isAdmin, user]
+    [isAdmin, user, m]
   )
 
   return (
@@ -377,11 +183,11 @@ export default function DashboardPage() {
           </h1>
         </div>
         <div className="hidden items-center gap-2 md:flex">
-          <Button variant="outline" onClick={() => setReceiptOpen(true)}>
+          <Button variant="outline" onClick={() => m.setReceiptOpen(true)}>
             <ScanLine />
             Analisar recibo
           </Button>
-          <Button variant="outline" onClick={() => setRequestOpen(true)}>
+          <Button variant="outline" onClick={() => m.setRequestOpen(true)}>
             <HandCoins />
             Solicitar
           </Button>
@@ -392,7 +198,7 @@ export default function DashboardPage() {
               ⌘K
             </kbd>
           </Button>
-          <Button onClick={() => setSheetMode("create")}>
+          <Button onClick={() => m.setSheetMode("create")}>
             <Plus />
             Nova transação
           </Button>
@@ -413,9 +219,9 @@ export default function DashboardPage() {
           <PendingRequests
             requests={metrics!.pendingRequests}
             participants={participants}
-            markingPaidIds={markingPaidIds}
-            onMarkPaid={handleMarkPaid}
-            onCreate={() => setRequestOpen(true)}
+            markingPaidIds={m.markingPaidIds}
+            onMarkPaid={m.handleMarkPaid}
+            onCreate={() => m.setRequestOpen(true)}
           />
 
           <TransactionsWorkspace
@@ -428,7 +234,7 @@ export default function DashboardPage() {
             rowSelection={rowSelection}
             onRowSelectionChange={setRowSelection}
             rowActions={rowActionsRenderer}
-            onRowClick={(t) => setSheetMode({ kind: "edit", transaction: t })}
+            onRowClick={(t) => m.setSheetMode({ kind: "edit", transaction: t })}
             heading={
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
@@ -445,22 +251,22 @@ export default function DashboardPage() {
 
       <BulkActionsBar
         count={selectedIds.length}
-        onQuickEdit={() => setBulkQuickEditOpen(true)}
-        onAdvancedEdit={() => setBulkAdvancedOpen(true)}
-        onDelete={() => setBulkDeleteOpen(true)}
+        onQuickEdit={() => m.setBulkQuickEditOpen(true)}
+        onAdvancedEdit={() => m.setBulkAdvancedOpen(true)}
+        onDelete={() => m.setBulkDeleteOpen(true)}
         onClear={() => setRowSelection({})}
       />
 
       <TransactionSheet
-        open={sheetMode !== null}
+        open={m.sheetMode !== null}
         onOpenChange={(o) => {
-          if (!o) setSheetMode(null)
+          if (!o) m.setSheetMode(null)
         }}
         mode={
-          sheetMode === "create"
+          m.sheetMode === "create"
             ? "create"
-            : sheetMode
-            ? { transaction: sheetMode.transaction }
+            : m.sheetMode
+            ? { transaction: m.sheetMode.transaction }
             : "create"
         }
         currentUser={user ?? ""}
@@ -469,59 +275,59 @@ export default function DashboardPage() {
           participants: defaultParticipants,
         }}
         onSubmit={async (values) => {
-          if (sheetMode === "create" || sheetMode === null) {
-            await handleCreate(values)
+          if (m.sheetMode === "create" || m.sheetMode === null) {
+            await m.handleCreate(values)
           } else {
-            await handleEdit(sheetMode.transaction.id, values)
+            await m.handleEdit(m.sheetMode.transaction.id, values)
           }
         }}
       />
 
       <DeleteTransactionDialog
-        open={pendingDelete !== null}
+        open={m.pendingDelete !== null}
         onOpenChange={(o) => {
-          if (!o) setPendingDelete(null)
+          if (!o) m.setPendingDelete(null)
         }}
-        label={pendingDelete?.description ?? undefined}
-        pending={deleting}
-        onConfirm={handleDelete}
+        label={m.pendingDelete?.description ?? undefined}
+        pending={m.deleting}
+        onConfirm={m.handleDelete}
       />
 
       <DeleteTransactionDialog
-        open={bulkDeleteOpen}
-        onOpenChange={setBulkDeleteOpen}
+        open={m.bulkDeleteOpen}
+        onOpenChange={m.setBulkDeleteOpen}
         count={selectedIds.length}
-        pending={bulkPending}
-        onConfirm={handleBulkDelete}
+        pending={m.bulkPending}
+        onConfirm={m.handleBulkDelete}
       />
 
       <BulkQuickEditDialog
-        open={bulkQuickEditOpen}
-        onOpenChange={setBulkQuickEditOpen}
+        open={m.bulkQuickEditOpen}
+        onOpenChange={m.setBulkQuickEditOpen}
         count={selectedIds.length}
-        pending={bulkPending}
-        onConfirm={handleBulkQuickEdit}
+        pending={m.bulkPending}
+        onConfirm={m.handleBulkQuickEdit}
       />
 
       <BulkAdvancedEditDialog
-        open={bulkAdvancedOpen}
-        onOpenChange={setBulkAdvancedOpen}
+        open={m.bulkAdvancedOpen}
+        onOpenChange={m.setBulkAdvancedOpen}
         count={selectedIds.length}
-        pending={bulkPending}
-        onConfirm={handleBulkAdvancedEdit}
+        pending={m.bulkPending}
+        onConfirm={m.handleBulkAdvancedEdit}
       />
 
       <RequestDialog
-        open={requestOpen}
-        onOpenChange={setRequestOpen}
-        onSubmit={handleCreateRequest}
+        open={m.requestOpen}
+        onOpenChange={m.setRequestOpen}
+        onSubmit={m.handleCreateRequest}
       />
 
       <ReceiptAnalyzeSheet
-        open={receiptOpen}
-        onOpenChange={setReceiptOpen}
+        open={m.receiptOpen}
+        onOpenChange={m.setReceiptOpen}
         currentUser={user ?? ""}
-        onSaved={handleReceiptSaved}
+        onSaved={m.handleReceiptSaved}
       />
 
       {user && (
@@ -531,14 +337,8 @@ export default function DashboardPage() {
         />
       )}
 
-      <Fab onClick={() => setSheetMode("create")} aria-label="Nova transação" />
+      <Fab onClick={() => m.setSheetMode("create")} aria-label="Nova transação" />
     </div>
-  )
-}
-
-function triggerCmdK() {
-  window.dispatchEvent(
-    new KeyboardEvent("keydown", { key: "k", metaKey: true, ctrlKey: true })
   )
 }
 

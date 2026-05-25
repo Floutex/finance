@@ -29,6 +29,8 @@ type TransactionSheetProps = {
   createDefaults?: Partial<TransactionFormValues>
   /** Persistence callback. The parent integrates with cache/toasts. */
   onSubmit: (values: TransactionFormSubmit) => Promise<void>
+  /** Override "Pago por" options (defaults to members in the form). */
+  payerOptions?: { id: string; name: string }[]
 }
 
 export function TransactionSheet({
@@ -38,6 +40,7 @@ export function TransactionSheet({
   currentUser,
   createDefaults,
   onSubmit,
+  payerOptions,
 }: TransactionSheetProps) {
   const initial = React.useMemo<TransactionFormValues>(() => {
     if (mode === "create") {
@@ -84,6 +87,7 @@ export function TransactionSheet({
             defaultValues={initial}
             currentUser={currentUser}
             existingReceiptUrl={existingReceiptUrl}
+            payerOptions={payerOptions}
             onCancel={() => onOpenChange(false)}
             onSubmit={async (values) => {
               await onSubmit(values)

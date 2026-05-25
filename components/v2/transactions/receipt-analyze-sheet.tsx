@@ -45,6 +45,8 @@ type ReceiptAnalyzeSheetProps = {
   currentUser: string
   /** Called when transactions have been saved successfully. */
   onSaved: (transactions: Transaction[]) => void
+  /** Override "Pago por" dropdown options (defaults to members). */
+  payerOptions?: { id: string; name: string }[]
 }
 
 /**
@@ -60,9 +62,11 @@ export function ReceiptAnalyzeSheet({
   onOpenChange,
   currentUser,
   onSaved,
+  payerOptions,
 }: ReceiptAnalyzeSheetProps) {
   const { active: participants, members } = useParticipants()
   const { categories } = useCategories()
+  const payers = payerOptions ?? members
 
   const [file, setFile] = React.useState<File | null>(null)
   const [preview, setPreview] = React.useState<string | null>(null)
@@ -345,7 +349,7 @@ export function ReceiptAnalyzeSheet({
                                 <SelectValue placeholder="Selecione" />
                               </SelectTrigger>
                               <SelectContent>
-                                {members.map((m) => (
+                                {payers.map((m) => (
                                   <SelectItem key={m.id} value={m.name}>
                                     {m.name}
                                   </SelectItem>

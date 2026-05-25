@@ -83,6 +83,11 @@ type TransactionFormProps = {
   submitLabel?: string
   /** Compact mode — used in quick-add. Hides custom-shares & receipt upload. */
   compact?: boolean
+  /**
+   * Override the "Pago por" options. Defaults to `members`. Guests pass `active`
+   * (or `[guestParticipant]`) so they can select themselves as the payer.
+   */
+  payerOptions?: { id: string; name: string }[]
   className?: string
 }
 
@@ -94,10 +99,12 @@ export function TransactionForm({
   onSubmit,
   submitLabel = "Salvar",
   compact = false,
+  payerOptions,
   className,
 }: TransactionFormProps) {
   const { categories } = useCategories()
   const { active: participants, members } = useParticipants()
+  const payers = payerOptions ?? members
   const [receiptFile, setReceiptFile] = React.useState<File | null>(null)
   const [submitError, setSubmitError] = React.useState<string | null>(null)
 
@@ -277,7 +284,7 @@ export function TransactionForm({
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
-                  {members.map((m) => (
+                  {payers.map((m) => (
                     <SelectItem key={m.id} value={m.name}>
                       {m.name}
                     </SelectItem>

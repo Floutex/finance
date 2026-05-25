@@ -5,13 +5,15 @@ import * as React from "react"
 import type { Tables } from "@/lib/database.types"
 import type { Participant } from "@/lib/participants-cache"
 
+type Transaction = Tables<"shared_transactions">
+
 export type GuestState = {
   participant: Participant
   members: Participant[]
   /** All non-archived participants (members + active guests). Used for badges. */
   participants: Participant[]
   /** Full transactions set (excluding `is_hidden`). */
-  transactions: Tables<"shared_transactions">[]
+  transactions: Transaction[]
   monthlyIncomes: Tables<"monthly_incomes">[]
 }
 
@@ -20,6 +22,8 @@ type GuestContextValue = {
   state: GuestState
   refreshing: boolean
   refresh: () => Promise<void>
+  /** Optimistic local cache update — same shape as `useTransactions().updateCache`. */
+  updateTransactions: (updater: (prev: Transaction[]) => Transaction[]) => void
 }
 
 const GuestContext = React.createContext<GuestContextValue | null>(null)
@@ -55,9 +59,16 @@ export function GuestProvider({
     }
   }, [token])
 
+  const updateTransactions = React.useCallback(
+    (updater: (prev: Transaction[]) => Transaction[]) => {
+      setState((prev) => ({ ...prev, transactions: updater(prev.transactions) }))
+    },
+    []
+  )
+
   const value = React.useMemo<GuestContextValue>(
-    () => ({ token, state, refreshing, refresh }),
-    [token, state, refreshing, refresh]
+    () => ({ token, state, refreshing, refresh, updateTransactions }),
+    [token, state, refreshing, refresh, updateTransactions]
   )
 
   return <GuestContext.Provider value={value}>{children}</GuestContext.Provider>
