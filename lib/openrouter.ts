@@ -13,5 +13,6 @@ export function getOpenRouterClient() {
   })
 }
 
-export const OPENROUTER_MODEL =
-  process.env.OPENROUTER_MODEL || "google/gemini-3.5-flash"
+// Modelo fixo no código (não via env) — env var já causou 400 com slug inválido
+// sobrescrevendo o default silenciosamente. Slug válido conferido na API do OpenRouter.
+export const OPENROUTER_MODEL = "google/gemini-3.5-flash"
