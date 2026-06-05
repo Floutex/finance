@@ -14,4 +14,4 @@ export function getOpenRouterClient() {
 }
 
 export const OPENROUTER_MODEL =
-  process.env.OPENROUTER_MODEL || "google/gemini-3-flash"
+  process.env.OPENROUTER_MODEL || "google/gemini-3.5-flash"
