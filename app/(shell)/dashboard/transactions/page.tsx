@@ -308,7 +308,7 @@ export default function TransactionsPage() {
         <QuickAdd
           currentUser={user}
           defaultParticipants={defaultParticipants}
-          onCreate={m.handleCreate}
+          onCreateMany={m.handleCreateMany}
         />
       )}
 

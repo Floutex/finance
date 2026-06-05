@@ -334,7 +334,7 @@ export default function DashboardPage() {
         <QuickAdd
           currentUser={user}
           defaultParticipants={defaultParticipants}
-          onCreate={m.handleCreate}
+          onCreateMany={m.handleCreateMany}
         />
       )}
 

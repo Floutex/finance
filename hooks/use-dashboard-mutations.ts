@@ -55,6 +55,10 @@ export type UseDashboardMutationsResult = {
   markingPaidIds: Set<string>
   // Handlers
   handleCreate: (values: Omit<CreatePayload, "currentUser">) => Promise<void>
+  /** Cria várias transações de uma vez (quick-add multi). Um toast de resumo. */
+  handleCreateMany: (
+    items: Omit<CreatePayload, "currentUser">[]
+  ) => Promise<void>
   handleEdit: (id: string, values: Omit<CreatePayload, "currentUser">) => Promise<void>
   handleDelete: () => Promise<void>
   handleBulkDelete: () => Promise<void>
@@ -106,6 +110,27 @@ export function useDashboardMutations({
       const created = await createTransaction({ ...values, currentUser })
       updateCache((prev) => [created, ...prev])
       toast.success("Transação criada.")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao criar.")
+      throw e
+    }
+  }
+
+  const handleCreateMany = async (
+    items: Omit<CreatePayload, "currentUser">[]
+  ) => {
+    if (!currentUser || items.length === 0) return
+    try {
+      const created: Transaction[] = []
+      for (const v of items) {
+        created.push(await createTransaction({ ...v, currentUser }))
+      }
+      updateCache((prev) => [...created, ...prev])
+      toast.success(
+        created.length === 1
+          ? "Transação criada."
+          : `${created.length} transações criadas.`
+      )
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Falha ao criar.")
       throw e
@@ -294,6 +319,7 @@ export function useDashboardMutations({
     setRequestOpen,
     markingPaidIds,
     handleCreate,
+    handleCreateMany,
     handleEdit,
     handleDelete,
     handleBulkDelete,

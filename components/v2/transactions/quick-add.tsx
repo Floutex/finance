@@ -21,8 +21,8 @@ type CreatePayload = {
 type QuickAddProps = {
   currentUser: string
   defaultParticipants: string[]
-  /** Persiste a transação (mesma lógica do formulário). */
-  onCreate: (payload: CreatePayload) => Promise<void>
+  /** Persiste uma ou várias transações de uma vez (mesma lógica do formulário). */
+  onCreateMany: (payloads: CreatePayload[]) => Promise<void>
   /**
    * Quem pode ser "pago por". Default = membros. Convidados passam só o próprio
    * nome para registrarem o que eles pagaram.
@@ -31,14 +31,14 @@ type QuickAddProps = {
 }
 
 /**
- * Cmd+K: digite o gasto em linguagem natural ("mercado 80 dividido com a Ana"),
- * aperte Enter e a IA extrai e cria a transação num único disparo — sem
- * perguntas de follow-up. Falha → mensagem curta, sem travar o fluxo.
+ * Cmd+K: digite um ou vários gastos em linguagem natural ("mercado 80, uber 25
+ * ontem com a Ana"), aperte Enter e a IA extrai e cria todas as transações num
+ * único disparo — sem perguntas de follow-up. Falha → mensagem curta.
  */
 export function QuickAdd({
   currentUser,
   defaultParticipants,
-  onCreate,
+  onCreateMany,
   payerNames,
 }: QuickAddProps) {
   const { active, members } = useParticipants()
@@ -91,32 +91,34 @@ export function QuickAdd({
       const data = (await res.json().catch(() => ({}))) as {
         ok?: boolean
         error?: string
-        transaction?: {
+        transactions?: {
           description: string
           amount: number
           date: string
           paid_by: string
           category: string | null
           participants: string[]
-        }
+        }[]
       }
 
-      if (!res.ok || !data.ok || !data.transaction) {
+      if (!res.ok || !data.ok || !data.transactions?.length) {
         setErrorMsg(data.error || `Falha ao processar (HTTP ${res.status}).`)
         return
       }
 
-      await onCreate({
-        description: data.transaction.description,
-        category: data.transaction.category,
-        paid_by: data.transaction.paid_by,
-        date: data.transaction.date,
-        amount: data.transaction.amount,
-        participants: data.transaction.participants,
-        custom_shares: null,
-        receipt_file: null,
-      })
-      // handleCreate já mostra o toast de sucesso; fecha o palette.
+      await onCreateMany(
+        data.transactions.map((t) => ({
+          description: t.description,
+          category: t.category,
+          paid_by: t.paid_by,
+          date: t.date,
+          amount: t.amount,
+          participants: t.participants,
+          custom_shares: null,
+          receipt_file: null,
+        }))
+      )
+      // handleCreateMany já mostra o toast de resumo; fecha o palette.
       setOpen(false)
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : "Falha ao adicionar.")
@@ -146,7 +148,7 @@ export function QuickAdd({
                   submit()
                 }
               }}
-              placeholder="Adicionar gasto: ex. “mercado 80 dividido com a Ana”"
+              placeholder="Adicionar gastos: ex. “mercado 80, uber 25 ontem com a Ana”"
               disabled={pending}
               className={cn(
                 "flex h-11 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
@@ -165,7 +167,8 @@ export function QuickAdd({
               <p className="text-sm text-destructive">{errorMsg}</p>
             ) : (
               <p className="text-center text-sm text-muted-foreground">
-                Descreva o gasto e aperte Enter. A IA cria a transação pra você.
+                Descreva um ou vários gastos e aperte Enter. A IA cria as
+                transações pra você.
               </p>
             )}
           </div>

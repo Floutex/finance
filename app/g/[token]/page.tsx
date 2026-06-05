@@ -301,7 +301,7 @@ export default function GuestDashboardPage() {
       <QuickAdd
         currentUser={user}
         defaultParticipants={defaultParticipants}
-        onCreate={mut.handleCreate}
+        onCreateMany={mut.handleCreateMany}
         payerNames={[user]}
       />
 

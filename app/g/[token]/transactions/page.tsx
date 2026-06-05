@@ -271,7 +271,7 @@ export default function GuestTransactionsPage() {
       <QuickAdd
         currentUser={user}
         defaultParticipants={defaultParticipants}
-        onCreate={mut.handleCreate}
+        onCreateMany={mut.handleCreateMany}
         payerNames={[user]}
       />
 
