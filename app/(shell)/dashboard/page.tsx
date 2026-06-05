@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Command, HandCoins, Plus, ScanLine } from "lucide-react"
+import { HandCoins, Plus, ScanLine, Sparkles } from "lucide-react"
 import type { RowSelectionState } from "@tanstack/react-table"
 import dynamic from "next/dynamic"
 
@@ -192,7 +192,7 @@ export default function DashboardPage() {
             Solicitar
           </Button>
           <Button variant="outline" onClick={() => triggerCmdK()}>
-            <Command />
+            <Sparkles />
             <span>Quick-add</span>
             <kbd className="hidden rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium md:inline-block">
               ⌘K
@@ -334,6 +334,7 @@ export default function DashboardPage() {
         <QuickAdd
           currentUser={user}
           defaultParticipants={defaultParticipants}
+          onCreate={m.handleCreate}
         />
       )}
 

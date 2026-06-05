@@ -5,21 +5,46 @@ import { Loader2, Sparkles } from "lucide-react"
 
 import { cn } from "@/components/v2/primitives/utils"
 import { Dialog, DialogContent } from "@/components/v2/primitives/dialog"
+import { useParticipants } from "@/hooks/use-participants"
+
+type CreatePayload = {
+  description: string
+  category: string | null
+  paid_by: string
+  date: string
+  amount: number
+  participants: string[]
+  custom_shares: Record<string, number> | null
+  receipt_file?: File | null
+}
 
 type QuickAddProps = {
   currentUser: string
   defaultParticipants: string[]
+  /** Persiste a transação (mesma lógica do formulário). */
+  onCreate: (payload: CreatePayload) => Promise<void>
+  /**
+   * Quem pode ser "pago por". Default = membros. Convidados passam só o próprio
+   * nome para registrarem o que eles pagaram.
+   */
+  payerNames?: string[]
 }
 
 /**
- * Cmd+K palette: type a question, press Enter, the IA answers below.
- * Same visual as the previous command palette — just no actions.
+ * Cmd+K: digite o gasto em linguagem natural ("mercado 80 dividido com a Ana"),
+ * aperte Enter e a IA extrai e cria a transação num único disparo — sem
+ * perguntas de follow-up. Falha → mensagem curta, sem travar o fluxo.
  */
-export function QuickAdd({ currentUser, defaultParticipants }: QuickAddProps) {
+export function QuickAdd({
+  currentUser,
+  defaultParticipants,
+  onCreate,
+  payerNames,
+}: QuickAddProps) {
+  const { active, members } = useParticipants()
   const [open, setOpen] = React.useState(false)
   const [query, setQuery] = React.useState("")
   const [pending, setPending] = React.useState(false)
-  const [answer, setAnswer] = React.useState<string | null>(null)
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null)
   const inputRef = React.useRef<HTMLInputElement>(null)
 
@@ -34,46 +59,67 @@ export function QuickAdd({ currentUser, defaultParticipants }: QuickAddProps) {
     return () => window.removeEventListener("keydown", handler)
   }, [])
 
-  // Reset transient state when dialog closes; autofocus when it opens.
   React.useEffect(() => {
     if (!open) {
       setQuery("")
-      setAnswer(null)
       setErrorMsg(null)
       setPending(false)
     } else {
-      // small delay so the dialog mounts before we focus
       const t = setTimeout(() => inputRef.current?.focus(), 0)
       return () => clearTimeout(t)
     }
   }, [open])
 
-  async function send() {
+  async function submit() {
     const text = query.trim()
     if (!text || pending) return
     setPending(true)
     setErrorMsg(null)
-    setAnswer(null)
     try {
       const res = await fetch("/api/quick-add", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          text,
           currentUser,
-          members: [],
-          participants: defaultParticipants,
+          members: payerNames ?? members.map((m) => m.name),
+          participants: active.map((p) => p.name),
+          defaultParticipants,
           today: new Date().toISOString().slice(0, 10),
-          messages: [{ role: "user", text }],
         }),
       })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.details || err.error || `HTTP ${res.status}`)
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean
+        error?: string
+        transaction?: {
+          description: string
+          amount: number
+          date: string
+          paid_by: string
+          category: string | null
+          participants: string[]
+        }
       }
-      const data = (await res.json()) as { text: string }
-      setAnswer(data.text || "(sem resposta)")
+
+      if (!res.ok || !data.ok || !data.transaction) {
+        setErrorMsg(data.error || `Falha ao processar (HTTP ${res.status}).`)
+        return
+      }
+
+      await onCreate({
+        description: data.transaction.description,
+        category: data.transaction.category,
+        paid_by: data.transaction.paid_by,
+        date: data.transaction.date,
+        amount: data.transaction.amount,
+        participants: data.transaction.participants,
+        custom_shares: null,
+        receipt_file: null,
+      })
+      // handleCreate já mostra o toast de sucesso; fecha o palette.
+      setOpen(false)
     } catch (e) {
-      setErrorMsg(e instanceof Error ? e.message : "Falha ao falar com a IA")
+      setErrorMsg(e instanceof Error ? e.message : "Falha ao adicionar.")
     } finally {
       setPending(false)
     }
@@ -81,14 +127,15 @@ export function QuickAdd({ currentUser, defaultParticipants }: QuickAddProps) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent
-        hideClose
-        className="max-w-2xl overflow-hidden p-0 shadow-2xl"
-      >
+      <DialogContent hideClose className="max-w-2xl overflow-hidden p-0 shadow-2xl">
         <div className="flex h-full w-full flex-col overflow-hidden rounded-md bg-popover text-popover-foreground">
-          {/* Input row — mimics CommandInput exactly */}
+          {/* Input row */}
           <div className="flex items-center border-b border-border px-3">
-            <Sparkles className="mr-2 size-4 shrink-0 text-primary opacity-80" />
+            {pending ? (
+              <Loader2 className="mr-2 size-4 shrink-0 animate-spin text-primary" />
+            ) : (
+              <Sparkles className="mr-2 size-4 shrink-0 text-primary opacity-80" />
+            )}
             <input
               ref={inputRef}
               value={query}
@@ -96,10 +143,10 @@ export function QuickAdd({ currentUser, defaultParticipants }: QuickAddProps) {
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault()
-                  send()
+                  submit()
                 }
               }}
-              placeholder="Pergunte algo pra IA…"
+              placeholder="Adicionar gasto: ex. “mercado 80 dividido com a Ana”"
               disabled={pending}
               className={cn(
                 "flex h-11 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
@@ -107,25 +154,18 @@ export function QuickAdd({ currentUser, defaultParticipants }: QuickAddProps) {
             />
           </div>
 
-          {/* Response area */}
-          <div className="max-h-[300px] overflow-y-auto px-4 py-4">
+          {/* Status area */}
+          <div className="px-4 py-4">
             {pending ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="size-4 animate-spin" />
-                Pensando…
+                Adicionando…
               </div>
             ) : errorMsg ? (
               <p className="text-sm text-destructive">{errorMsg}</p>
-            ) : answer ? (
-              <div className="flex gap-3">
-                <Sparkles className="mt-0.5 size-4 shrink-0 text-primary" />
-                <p className="whitespace-pre-wrap text-sm leading-relaxed">
-                  {answer}
-                </p>
-              </div>
             ) : (
-              <p className="py-6 text-center text-sm text-muted-foreground">
-                Escreva uma pergunta e aperte Enter.
+              <p className="text-center text-sm text-muted-foreground">
+                Descreva o gasto e aperte Enter. A IA cria a transação pra você.
               </p>
             )}
           </div>

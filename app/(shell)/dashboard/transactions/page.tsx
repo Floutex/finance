@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import dynamic from "next/dynamic"
-import { Command, HandCoins, Plus, ScanLine, Users } from "lucide-react"
+import { HandCoins, Plus, ScanLine, Sparkles, Users } from "lucide-react"
 import type { RowSelectionState } from "@tanstack/react-table"
 
 import { useTransactions } from "@/hooks/use-transactions"
@@ -188,7 +188,7 @@ export default function TransactionsPage() {
             Solicitar
           </Button>
           <Button variant="outline" onClick={() => triggerCmdK()}>
-            <Command />
+            <Sparkles />
             <span>Quick-add</span>
             <kbd className="hidden rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium md:inline-block">
               ⌘K
@@ -308,6 +308,7 @@ export default function TransactionsPage() {
         <QuickAdd
           currentUser={user}
           defaultParticipants={defaultParticipants}
+          onCreate={m.handleCreate}
         />
       )}
 
