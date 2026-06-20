@@ -15,6 +15,7 @@ import { Button } from "@/components/v2/primitives/button"
 import { Input } from "@/components/v2/primitives/input"
 import { Label } from "@/components/v2/primitives/label"
 import { Badge } from "@/components/v2/primitives/badge"
+import { DateRangePicker } from "@/components/v2/primitives/date-picker"
 import { cn } from "@/components/v2/primitives/utils"
 import type { TransactionsToolbarValue } from "@/components/v2/transactions/transactions-toolbar"
 
@@ -134,37 +135,24 @@ export function MobileFiltersSheet({
                 ))}
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="mfilter-start">De</Label>
-                <Input
-                  id="mfilter-start"
-                  type="date"
-                  value={draft.start}
-                  onChange={(e) =>
-                    setDraft((d) => ({
-                      ...d,
-                      start: e.target.value,
-                      activeRange: null,
-                    }))
-                  }
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="mfilter-end">Até</Label>
-                <Input
-                  id="mfilter-end"
-                  type="date"
-                  value={draft.end}
-                  onChange={(e) =>
-                    setDraft((d) => ({
-                      ...d,
-                      end: e.target.value,
-                      activeRange: null,
-                    }))
-                  }
-                />
-              </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="mfilter-range">Período personalizado</Label>
+              <DateRangePicker
+                id="mfilter-range"
+                start={draft.start}
+                end={draft.end}
+                onChange={(next) =>
+                  setDraft((d) => ({
+                    ...d,
+                    start: next.start,
+                    end: next.end,
+                    activeRange: null,
+                  }))
+                }
+                align="start"
+                numberOfMonths={1}
+                className="w-full"
+              />
             </div>
           </div>
           <SheetFooter>

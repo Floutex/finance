@@ -222,6 +222,7 @@ export default function GuestDashboardPage() {
             : "create"
         }
         currentUser={user}
+        canEditPayer={false}
         createDefaults={{
           paid_by: user,
           participants: defaultParticipants,
@@ -274,6 +275,7 @@ export default function GuestDashboardPage() {
         open={mut.receiptOpen}
         onOpenChange={mut.setReceiptOpen}
         currentUser={user}
+        canEditPayer={false}
         onSaved={mut.handleReceiptSaved}
         payerOptions={payerOptions}
       />

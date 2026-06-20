@@ -8,7 +8,6 @@ import { toast } from "sonner"
 
 import { cn } from "@/components/v2/primitives/utils"
 import { Button } from "@/components/v2/primitives/button"
-import { Input } from "@/components/v2/primitives/input"
 import { Label } from "@/components/v2/primitives/label"
 import { Badge } from "@/components/v2/primitives/badge"
 import { Skeleton } from "@/components/v2/primitives/skeleton"
@@ -19,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/v2/primitives/select"
+import { DateRangePicker } from "@/components/v2/primitives/date-picker"
 import { ParticipantBadge } from "@/components/v2/finance/participant-badge"
 import { Currency } from "@/components/v2/finance/currency"
 import { useParticipants } from "@/hooks/use-participants"
@@ -168,26 +168,20 @@ export function AuditLog() {
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-1">
-          <Label htmlFor="audit-start" className="text-xs text-muted-foreground">
-            De
+        <div className="space-y-1 md:col-span-2">
+          <Label htmlFor="audit-range" className="text-xs text-muted-foreground">
+            Período
           </Label>
-          <Input
-            id="audit-start"
-            type="date"
-            value={start}
-            onChange={(e) => setStart(e.target.value)}
-          />
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="audit-end" className="text-xs text-muted-foreground">
-            Até
-          </Label>
-          <Input
-            id="audit-end"
-            type="date"
-            value={end}
-            onChange={(e) => setEnd(e.target.value)}
+          <DateRangePicker
+            id="audit-range"
+            start={start}
+            end={end}
+            onChange={(next) => {
+              setStart(next.start)
+              setEnd(next.end)
+            }}
+            align="end"
+            className="w-full"
           />
         </div>
       </div>

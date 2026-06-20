@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/v2/primitives/select"
+import { DatePicker } from "@/components/v2/primitives/date-picker"
 import { normalizeNumber } from "@/lib/constants"
 
 type Member = { id: string; name: string }
@@ -155,7 +156,12 @@ export function GuestPaybackDialog({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="payback-date">Data</Label>
-              <Input id="payback-date" type="date" {...register("date")} />
+              <DatePicker
+                id="payback-date"
+                value={watch("date")}
+                onChange={(v) => setValue("date", v, { shouldValidate: true })}
+                aria-label="Data"
+              />
               {errors.date && (
                 <p className="text-xs text-destructive">{errors.date.message}</p>
               )}

@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/v2/primitives/select"
+import { DatePicker } from "@/components/v2/primitives/date-picker"
 import { useCategories } from "@/hooks/use-categories"
 import { useParticipants } from "@/hooks/use-participants"
 
@@ -211,11 +212,13 @@ export function BulkAdvancedEditDialog({
           </div>
           <div className="space-y-1.5 md:col-span-2">
             <Label htmlFor="adv-date">Data</Label>
-            <Input
+            <DatePicker
               id="adv-date"
-              type="date"
               value={date}
-              onChange={(e) => setDate(e.target.value)}
+              onChange={setDate}
+              placeholder="Manter data atual"
+              clearable
+              aria-label="Data"
             />
           </div>
         </div>

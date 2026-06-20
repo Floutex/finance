@@ -256,6 +256,7 @@ export default function DashboardPage() {
             : "create"
         }
         currentUser={user ?? ""}
+        canEditPayer={isAdmin}
         createDefaults={{
           paid_by: user ?? undefined,
           participants: defaultParticipants,
@@ -307,6 +308,7 @@ export default function DashboardPage() {
         open={m.receiptOpen}
         onOpenChange={m.setReceiptOpen}
         currentUser={user ?? ""}
+        canEditPayer={isAdmin}
         onSaved={m.handleReceiptSaved}
       />
 
@@ -315,6 +317,7 @@ export default function DashboardPage() {
           currentUser={user}
           defaultParticipants={defaultParticipants}
           onCreateMany={m.handleCreateMany}
+          payerNames={isAdmin ? undefined : [user]}
         />
       )}
 

@@ -6,6 +6,7 @@ import { Search, X } from "lucide-react"
 import { cn } from "@/components/v2/primitives/utils"
 import { Button } from "@/components/v2/primitives/button"
 import { Input } from "@/components/v2/primitives/input"
+import { DateRangePicker } from "@/components/v2/primitives/date-picker"
 
 const RANGES = ["1M", "3M", "6M", "1A", "ALL"] as const
 type Range = (typeof RANGES)[number]
@@ -48,10 +49,8 @@ export function TransactionsToolbar({
     onChange({ ...value, search })
   }
 
-  const setStart = (start: string) =>
-    onChange({ ...value, start, activeRange: null })
-
-  const setEnd = (end: string) => onChange({ ...value, end, activeRange: null })
+  const setRangeDates = (next: { start: string; end: string }) =>
+    onChange({ ...value, start: next.start, end: next.end, activeRange: null })
 
   const clearAll = () =>
     onChange({ search: "", start: "", end: "", activeRange: null })
@@ -87,19 +86,12 @@ export function TransactionsToolbar({
           ))}
         </div>
 
-        <Input
-          type="date"
-          value={value.start}
-          onChange={(e) => setStart(e.target.value)}
-          className="h-9 w-[140px]"
-          aria-label="Data inicial"
-        />
-        <Input
-          type="date"
-          value={value.end}
-          onChange={(e) => setEnd(e.target.value)}
-          className="h-9 w-[140px]"
-          aria-label="Data final"
+        <DateRangePicker
+          start={value.start}
+          end={value.end}
+          onChange={setRangeDates}
+          className="w-[230px]"
+          aria-label="Período"
         />
 
         {hasFilter && (

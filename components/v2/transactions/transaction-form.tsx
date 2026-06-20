@@ -4,7 +4,7 @@ import * as React from "react"
 import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { Loader2, SplitSquareHorizontal } from "lucide-react"
+import { Loader2, Lock, SplitSquareHorizontal } from "lucide-react"
 
 import { cn } from "@/components/v2/primitives/utils"
 import { Button } from "@/components/v2/primitives/button"
@@ -18,11 +18,45 @@ import {
   SelectValue,
 } from "@/components/v2/primitives/select"
 import { Separator } from "@/components/v2/primitives/separator"
+import { DatePicker } from "@/components/v2/primitives/date-picker"
 import { ParticipantBadge } from "@/components/v2/finance/participant-badge"
 import { ReceiptUpload } from "@/components/v2/transactions/receipt-upload"
+import { CategoryCombobox } from "@/components/v2/transactions/category-combobox"
+import {
+  SplitSlider,
+  reconcileShares,
+} from "@/components/v2/transactions/split-slider"
 import { useCategories } from "@/hooks/use-categories"
 import { useParticipants } from "@/hooks/use-participants"
 import { normalizeNumber } from "@/lib/constants"
+
+const round2 = (n: number) => Math.round(n * 100) / 100
+
+/** Build a shares map keyed by `participants` that sums to `total`, keeping the
+ *  prior proportions when possible (equal split otherwise). */
+function normalizeShares(
+  prev: Record<string, number> | null,
+  participants: string[],
+  total: number
+): Record<string, number> {
+  if (participants.length === 0) return {}
+  const base: Record<string, number> = {}
+  let anyPrev = false
+  for (const p of participants) {
+    const v = prev?.[p]
+    if (typeof v === "number" && v > 0) anyPrev = true
+    base[p] = typeof v === "number" ? Math.max(0, v) : 0
+  }
+  const sum = participants.reduce((a, p) => a + base[p], 0)
+  if (!anyPrev || sum <= 0) {
+    const each = total / participants.length
+    participants.forEach((p) => (base[p] = each))
+  } else {
+    const scale = total / sum
+    participants.forEach((p) => (base[p] = base[p] * scale))
+  }
+  return reconcileShares(base, participants, total)
+}
 
 export type TransactionFormValues = {
   description: string
@@ -88,6 +122,12 @@ type TransactionFormProps = {
    * (or `[guestParticipant]`) so they can select themselves as the payer.
    */
   payerOptions?: { id: string; name: string }[]
+  /**
+   * Whether the user may choose who paid. Only admins can. Non-admins (and
+   * guests) get the field locked to whoever it's already set to (themselves on
+   * create), so they can only register transactions they paid for.
+   */
+  canEditPayer?: boolean
   className?: string
 }
 
@@ -100,6 +140,7 @@ export function TransactionForm({
   submitLabel = "Salvar",
   compact = false,
   payerOptions,
+  canEditPayer = true,
   className,
 }: TransactionFormProps) {
   const { categories } = useCategories()
@@ -141,18 +182,19 @@ export function TransactionForm({
     !customSplitEnabled ||
     (totalAmount > 0 && Math.abs(customSharesSum - totalAmount) < 0.01)
 
-  // Sync custom shares when participants list changes
+  // Keep custom shares consistent: re-key to the current participants and
+  // re-scale to the current total, preserving proportions. Idempotent, so it
+  // doesn't fight the slider's own (already-normalized) updates.
   React.useEffect(() => {
-    if (!formCustomShares) return
-    const keys = Object.keys(formCustomShares)
-    const added = formParticipants.filter((p) => !keys.includes(p))
-    const removed = keys.filter((p) => !formParticipants.includes(p))
-    if (added.length === 0 && removed.length === 0) return
-    const next = { ...formCustomShares }
-    for (const p of removed) delete next[p]
-    for (const p of added) next[p] = 0
-    setValue("customShares", next, { shouldDirty: true })
-  }, [formParticipants, formCustomShares, setValue])
+    if (!formCustomShares || totalAmount <= 0) return
+    const next = normalizeShares(formCustomShares, formParticipants, totalAmount)
+    const changed =
+      Object.keys(next).length !== Object.keys(formCustomShares).length ||
+      formParticipants.some(
+        (p) => round2(next[p] ?? 0) !== round2(formCustomShares[p] ?? -1)
+      )
+    if (changed) setValue("customShares", next, { shouldDirty: true })
+  }, [formParticipants, totalAmount, formCustomShares, setValue])
 
   const toggleParticipant = (name: string) => {
     if (formParticipants.includes(name)) {
@@ -174,27 +216,12 @@ export function TransactionForm({
       setValue("customShares", null, { shouldDirty: true })
     } else {
       if (formParticipants.length === 0 || totalAmount <= 0) return
-      const equal = Number((totalAmount / formParticipants.length).toFixed(2))
-      const shares: Record<string, number> = {}
-      formParticipants.forEach((p, i) => {
-        if (i === formParticipants.length - 1) {
-          const assigned = Object.values(shares).reduce((a, b) => a + b, 0)
-          shares[p] = Number((totalAmount - assigned).toFixed(2))
-        } else {
-          shares[p] = equal
-        }
-      })
-      setValue("customShares", shares, { shouldDirty: true })
+      setValue(
+        "customShares",
+        normalizeShares(null, formParticipants, totalAmount),
+        { shouldDirty: true }
+      )
     }
-  }
-
-  const handleShareAmount = (participant: string, raw: string) => {
-    const value = normalizeNumber(raw) ?? 0
-    setValue(
-      "customShares",
-      { ...(formCustomShares ?? {}), [participant]: value },
-      { shouldDirty: true }
-    )
   }
 
   const onValid = handleSubmit(async (values) => {
@@ -267,7 +294,18 @@ export function TransactionForm({
 
         <div className="space-y-1.5">
           <Label htmlFor="date">Data</Label>
-          <Input id="date" type="date" {...register("date")} />
+          <Controller
+            control={control}
+            name="date"
+            render={({ field }) => (
+              <DatePicker
+                id="date"
+                value={field.value}
+                onChange={field.onChange}
+                aria-label="Data"
+              />
+            )}
+          />
           {errors.date && (
             <p className="text-xs text-destructive">{errors.date.message}</p>
           )}
@@ -275,24 +313,39 @@ export function TransactionForm({
 
         <div className="space-y-1.5">
           <Label htmlFor="paid_by">Pago por</Label>
-          <Controller
-            control={control}
-            name="paid_by"
-            render={({ field }) => (
-              <Select value={field.value} onValueChange={field.onChange}>
-                <SelectTrigger id="paid_by">
-                  <SelectValue placeholder="Selecione" />
-                </SelectTrigger>
-                <SelectContent>
-                  {payers.map((m) => (
-                    <SelectItem key={m.id} value={m.name}>
-                      {m.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          />
+          {canEditPayer ? (
+            <Controller
+              control={control}
+              name="paid_by"
+              render={({ field }) => (
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger id="paid_by">
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {payers.map((m) => (
+                      <SelectItem key={m.id} value={m.name}>
+                        {m.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+          ) : (
+            <>
+              <div
+                id="paid_by"
+                className="flex h-9 items-center gap-2 rounded-md border border-input bg-muted/30 px-3 text-sm"
+              >
+                <Lock className="size-3.5 shrink-0 text-muted-foreground" />
+                <span className="truncate">{formPaidBy || currentUser}</span>
+              </div>
+              <p className="text-[11px] leading-tight text-muted-foreground">
+                Só administradores podem registrar em nome de outra pessoa.
+              </p>
+            </>
+          )}
           {errors.paid_by && (
             <p className="text-xs text-destructive">
               {errors.paid_by.message}
@@ -302,18 +355,18 @@ export function TransactionForm({
 
         <div className="space-y-1.5">
           <Label htmlFor="category">Categoria</Label>
-          <Input
-            id="category"
-            list="v2-category-list"
-            autoComplete="off"
-            placeholder="Ex.: Mercado"
-            {...register("category")}
+          <Controller
+            control={control}
+            name="category"
+            render={({ field }) => (
+              <CategoryCombobox
+                id="category"
+                value={field.value}
+                onChange={field.onChange}
+                categories={categories}
+              />
+            )}
           />
-          <datalist id="v2-category-list">
-            {categories.map((c) => (
-              <option key={c.id} value={c.name} />
-            ))}
-          </datalist>
         </div>
       </div>
 
@@ -371,31 +424,20 @@ export function TransactionForm({
               </Button>
             </div>
             {customSplitEnabled && formCustomShares && (
-              <div className="space-y-2 rounded-md border border-border bg-background/40 p-3">
-                {formParticipants.map((p) => {
-                  const shareValue = formCustomShares[p] ?? 0
-                  return (
-                    <div key={p} className="flex items-center gap-3">
-                      <span className="w-24">
-                        <ParticipantBadge name={p} participants={participants} />
-                      </span>
-                      <Input
-                        inputMode="decimal"
-                        className="h-8 max-w-[140px]"
-                        value={
-                          shareValue === 0 ? "" : String(shareValue).replace(".", ",")
-                        }
-                        placeholder="0,00"
-                        onChange={(e) => handleShareAmount(p, e.target.value)}
-                      />
-                      <span className="text-xs text-muted-foreground tabular-nums">
-                        {totalAmount > 0
-                          ? `${((shareValue / totalAmount) * 100).toFixed(1)}%`
-                          : "—"}
-                      </span>
-                    </div>
-                  )
-                })}
+              <div className="space-y-3 rounded-md border border-border bg-background/40 p-3">
+                <p className="text-xs text-muted-foreground">
+                  Arraste as divisórias ou edite o valor/%. A soma trava sempre no
+                  total.
+                </p>
+                <SplitSlider
+                  participants={formParticipants}
+                  shares={formCustomShares}
+                  total={totalAmount}
+                  participantsMeta={participants}
+                  onChange={(next) =>
+                    setValue("customShares", next, { shouldDirty: true })
+                  }
+                />
                 <div
                   className={cn(
                     "flex items-center justify-between border-t border-border pt-2 text-xs",

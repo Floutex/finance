@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Image as ImageIcon, Loader2, Save, Sparkles, Trash2, X } from "lucide-react"
+import { Image as ImageIcon, Loader2, Lock, Save, Sparkles, Trash2, X } from "lucide-react"
 
 import { cn } from "@/components/v2/primitives/utils"
 import {
@@ -22,6 +22,8 @@ import {
   SelectValue,
 } from "@/components/v2/primitives/select"
 import { Separator } from "@/components/v2/primitives/separator"
+import { DatePicker } from "@/components/v2/primitives/date-picker"
+import { CategoryCombobox } from "@/components/v2/transactions/category-combobox"
 import { useParticipants } from "@/hooks/use-participants"
 import { useCategories } from "@/hooks/use-categories"
 import { getSupabaseClient } from "@/lib/supabase"
@@ -47,6 +49,8 @@ type ReceiptAnalyzeSheetProps = {
   onSaved: (transactions: Transaction[]) => void
   /** Override "Pago por" dropdown options (defaults to members). */
   payerOptions?: { id: string; name: string }[]
+  /** Only admins may choose the payer; others are locked to themselves. */
+  canEditPayer?: boolean
 }
 
 /**
@@ -63,6 +67,7 @@ export function ReceiptAnalyzeSheet({
   currentUser,
   onSaved,
   payerOptions,
+  canEditPayer = true,
 }: ReceiptAnalyzeSheetProps) {
   const { active: participants, members } = useParticipants()
   const { categories } = useCategories()
@@ -134,7 +139,7 @@ export function ReceiptAnalyzeSheet({
         (data.transactions as ExtractedTransaction[]).map((t) => ({
           ...t,
           participants: participants.map((p) => p.name),
-          paid_by: "",
+          paid_by: canEditPayer ? "" : currentUser,
           category: "",
         }))
       )
@@ -330,48 +335,49 @@ export function ReceiptAnalyzeSheet({
                           </div>
                           <div className="space-y-1.5">
                             <Label htmlFor={`dt-${i}`}>Data</Label>
-                            <Input
+                            <DatePicker
                               id={`dt-${i}`}
-                              type="date"
                               value={t.date}
-                              onChange={(e) =>
-                                updateExtracted(i, "date", e.target.value)
-                              }
+                              onChange={(v) => updateExtracted(i, "date", v)}
+                              aria-label="Data"
                             />
                           </div>
                           <div className="space-y-1.5">
                             <Label htmlFor={`p-${i}`}>Pago por</Label>
-                            <Select
-                              value={t.paid_by}
-                              onValueChange={(v) => updateExtracted(i, "paid_by", v)}
-                            >
-                              <SelectTrigger id={`p-${i}`}>
-                                <SelectValue placeholder="Selecione" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {payers.map((m) => (
-                                  <SelectItem key={m.id} value={m.name}>
-                                    {m.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            {canEditPayer ? (
+                              <Select
+                                value={t.paid_by}
+                                onValueChange={(v) => updateExtracted(i, "paid_by", v)}
+                              >
+                                <SelectTrigger id={`p-${i}`}>
+                                  <SelectValue placeholder="Selecione" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {payers.map((m) => (
+                                    <SelectItem key={m.id} value={m.name}>
+                                      {m.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <div
+                                id={`p-${i}`}
+                                className="flex h-9 items-center gap-2 rounded-md border border-input bg-muted/30 px-3 text-sm"
+                              >
+                                <Lock className="size-3.5 shrink-0 text-muted-foreground" />
+                                <span className="truncate">{t.paid_by || currentUser}</span>
+                              </div>
+                            )}
                           </div>
                           <div className="space-y-1.5">
                             <Label htmlFor={`c-${i}`}>Categoria</Label>
-                            <Input
+                            <CategoryCombobox
                               id={`c-${i}`}
-                              list={`cat-list-${i}`}
                               value={t.category}
-                              onChange={(e) =>
-                                updateExtracted(i, "category", e.target.value)
-                              }
+                              onChange={(v) => updateExtracted(i, "category", v)}
+                              categories={categories}
                             />
-                            <datalist id={`cat-list-${i}`}>
-                              {categories.map((c) => (
-                                <option key={c.id} value={c.name} />
-                              ))}
-                            </datalist>
                           </div>
                         </div>
                       </li>

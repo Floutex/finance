@@ -201,6 +201,7 @@ export default function GuestTransactionsPage() {
             : "create"
         }
         currentUser={user}
+        canEditPayer={false}
         createDefaults={{
           paid_by: user,
           participants: defaultParticipants,
@@ -253,6 +254,7 @@ export default function GuestTransactionsPage() {
         open={mut.receiptOpen}
         onOpenChange={mut.setReceiptOpen}
         currentUser={user}
+        canEditPayer={false}
         onSaved={mut.handleReceiptSaved}
         payerOptions={payerOptions}
       />
