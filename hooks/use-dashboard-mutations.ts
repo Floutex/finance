@@ -7,16 +7,12 @@ import type { RowSelectionState } from "@tanstack/react-table"
 import {
   bulkSoftDelete,
   bulkUpdate,
-  createPendingRequest,
   createTransaction,
-  markRequestPaid,
   softDeleteTransaction,
   updateTransaction,
   type CreatePayload,
-  type CreatePendingRequestPayload,
 } from "@/lib/v2/transaction-mutations"
 import type { Tables, TablesUpdate } from "@/lib/database.types"
-import type { RequestPayload } from "@/components/v2/transactions/request-dialog"
 
 type Transaction = Tables<"shared_transactions">
 
@@ -50,9 +46,6 @@ export type UseDashboardMutationsResult = {
   bulkPending: boolean
   receiptOpen: boolean
   setReceiptOpen: React.Dispatch<React.SetStateAction<boolean>>
-  requestOpen: boolean
-  setRequestOpen: React.Dispatch<React.SetStateAction<boolean>>
-  markingPaidIds: Set<string>
   // Handlers
   handleCreate: (values: Omit<CreatePayload, "currentUser">) => Promise<void>
   /** Cria várias transações de uma vez (quick-add multi). Um toast de resumo. */
@@ -71,8 +64,6 @@ export type UseDashboardMutationsResult = {
     paid_by?: string
     date?: string
   }) => Promise<void>
-  handleCreateRequest: (payload: RequestPayload) => Promise<void>
-  handleMarkPaid: (transaction: Transaction) => Promise<void>
   handleReceiptSaved: (created: Transaction[]) => void
 }
 
@@ -99,10 +90,6 @@ export function useDashboardMutations({
   const [bulkAdvancedOpen, setBulkAdvancedOpen] = React.useState(false)
   const [bulkPending, setBulkPending] = React.useState(false)
   const [receiptOpen, setReceiptOpen] = React.useState(false)
-  const [requestOpen, setRequestOpen] = React.useState(false)
-  const [markingPaidIds, setMarkingPaidIds] = React.useState<Set<string>>(
-    () => new Set()
-  )
 
   const handleCreate = async (values: Omit<CreatePayload, "currentUser">) => {
     if (!currentUser) return
@@ -255,44 +242,6 @@ export function useDashboardMutations({
     }
   }
 
-  const handleCreateRequest = async (payload: RequestPayload) => {
-    if (!currentUser) return
-    try {
-      const created = await createPendingRequest({
-        ...payload,
-        currentUser,
-      } as CreatePendingRequestPayload)
-      updateCache((prev) => [created, ...prev])
-      toast.success("Solicitação enviada.")
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Falha ao enviar solicitação.")
-    }
-  }
-
-  const handleMarkPaid = async (transaction: Transaction) => {
-    if (!currentUser) return
-    setMarkingPaidIds((prev) => {
-      const next = new Set(prev)
-      next.add(transaction.id)
-      return next
-    })
-    try {
-      const updated = await markRequestPaid(transaction.id, currentUser)
-      updateCache((prev) =>
-        prev.map((t) => (t.id === transaction.id ? updated : t))
-      )
-      toast.success("Cobrança marcada como paga.")
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Falha ao marcar como pago.")
-    } finally {
-      setMarkingPaidIds((prev) => {
-        const next = new Set(prev)
-        next.delete(transaction.id)
-        return next
-      })
-    }
-  }
-
   const handleReceiptSaved = (created: Transaction[]) => {
     updateCache((prev) => [...created, ...prev])
     toast.success(
@@ -315,9 +264,6 @@ export function useDashboardMutations({
     bulkPending,
     receiptOpen,
     setReceiptOpen,
-    requestOpen,
-    setRequestOpen,
-    markingPaidIds,
     handleCreate,
     handleCreateMany,
     handleEdit,
@@ -325,8 +271,6 @@ export function useDashboardMutations({
     handleBulkDelete,
     handleBulkQuickEdit,
     handleBulkAdvancedEdit,
-    handleCreateRequest,
-    handleMarkPaid,
     handleReceiptSaved,
   }
 }

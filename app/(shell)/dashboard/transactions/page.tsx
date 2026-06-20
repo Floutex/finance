@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import dynamic from "next/dynamic"
-import { HandCoins, Plus, ScanLine, Sparkles, Users } from "lucide-react"
+import { Plus, ScanLine, Sparkles, Users } from "lucide-react"
 import type { RowSelectionState } from "@tanstack/react-table"
 
 import { useTransactions } from "@/hooks/use-transactions"
@@ -27,7 +27,6 @@ import {
   BulkAdvancedEditDialog,
   BulkQuickEditDialog,
 } from "@/components/v2/transactions/bulk-edit-dialogs"
-import { RequestDialog } from "@/components/v2/transactions/request-dialog"
 import { Fab } from "@/components/v2/layout/fab"
 import type { Tables } from "@/lib/database.types"
 
@@ -183,10 +182,6 @@ export default function TransactionsPage() {
             <ScanLine />
             Analisar recibo
           </Button>
-          <Button variant="outline" onClick={() => m.setRequestOpen(true)}>
-            <HandCoins />
-            Solicitar
-          </Button>
           <Button variant="outline" onClick={() => triggerCmdK()}>
             <Sparkles />
             <span>Quick-add</span>
@@ -289,12 +284,6 @@ export default function TransactionsPage() {
         count={selectedIds.length}
         pending={m.bulkPending}
         onConfirm={m.handleBulkAdvancedEdit}
-      />
-
-      <RequestDialog
-        open={m.requestOpen}
-        onOpenChange={m.setRequestOpen}
-        onSubmit={m.handleCreateRequest}
       />
 
       <ReceiptAnalyzeSheet

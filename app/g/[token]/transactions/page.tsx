@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import dynamic from "next/dynamic"
-import { HandCoins, Plus, ScanLine, Sparkles } from "lucide-react"
+import { Plus, ScanLine, Sparkles } from "lucide-react"
 import type { RowSelectionState } from "@tanstack/react-table"
 
 import { useDashboardData } from "@/hooks/use-dashboard-data"
@@ -20,7 +20,6 @@ import {
   BulkAdvancedEditDialog,
   BulkQuickEditDialog,
 } from "@/components/v2/transactions/bulk-edit-dialogs"
-import { RequestDialog } from "@/components/v2/transactions/request-dialog"
 import { Fab } from "@/components/v2/layout/fab"
 import { useGuestContext } from "@/components/v2/guest/guest-context"
 import type { Tables } from "@/lib/database.types"
@@ -152,10 +151,6 @@ export default function GuestTransactionsPage() {
             <ScanLine />
             Analisar recibo
           </Button>
-          <Button variant="outline" onClick={() => mut.setRequestOpen(true)}>
-            <HandCoins />
-            Solicitar
-          </Button>
           <Button variant="outline" onClick={() => triggerCmdK()}>
             <Sparkles />
             <span>Quick-add</span>
@@ -252,12 +247,6 @@ export default function GuestTransactionsPage() {
         count={selectedIds.length}
         pending={mut.bulkPending}
         onConfirm={mut.handleBulkAdvancedEdit}
-      />
-
-      <RequestDialog
-        open={mut.requestOpen}
-        onOpenChange={mut.setRequestOpen}
-        onSubmit={mut.handleCreateRequest}
       />
 
       <ReceiptAnalyzeSheet

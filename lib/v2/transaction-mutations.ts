@@ -1,13 +1,12 @@
 /**
  * Shared mutation helpers for v2. Wraps `lib/supabase` calls used by the
- * SpreadsheetDashboard (insert, update, soft-delete, mark-paid, request) and
- * the receipt-upload flow so consumers don't reach into Supabase directly.
+ * SpreadsheetDashboard (insert, update, soft-delete) and the receipt-upload
+ * flow so consumers don't reach into Supabase directly.
  */
 
 import { getSupabaseClient, bulkDeleteByIds, bulkUpdateByIds } from "@/lib/supabase"
 import { uploadReceipt } from "@/lib/storage"
 import type { Tables, TablesInsert, TablesUpdate } from "@/lib/database.types"
-import { PENDING_MARKER } from "@/lib/constants"
 
 type Transaction = Tables<"shared_transactions">
 
@@ -145,59 +144,6 @@ export async function bulkUpdate(
   if (error) throw new Error(error.message)
 }
 
-export type CreatePendingRequestPayload = {
-  description: string
-  amount: number
-  date: string
-  pix?: string
-  currentUser: string
-}
-
-export async function createPendingRequest(
-  p: CreatePendingRequestPayload
-): Promise<Transaction> {
-  const supabase = getSupabaseClient()
-  const fullDescription = p.pix
-    ? `💰 ${p.description} | PIX: ${p.pix}`
-    : `💰 ${p.description}`
-  const insert: TablesInsert<"shared_transactions"> = {
-    description: fullDescription,
-    category: "Solicitação",
-    paid_by: PENDING_MARKER,
-    date: p.date,
-    amount: p.amount,
-    participants: [p.currentUser],
-    last_edited_by: p.currentUser,
-    last_edited_at: nowIso(),
-  }
-  const { data, error } = await supabase
-    .from("shared_transactions")
-    .insert(insert)
-    .select("*")
-    .single()
-  if (error) throw new Error(error.message)
-  return data!
-}
-
-export async function markRequestPaid(
-  transactionId: string,
-  currentUser: string
-): Promise<Transaction> {
-  const supabase = getSupabaseClient()
-  const { data, error } = await supabase
-    .from("shared_transactions")
-    .update({
-      paid_by: currentUser,
-      last_edited_by: currentUser,
-      last_edited_at: nowIso(),
-    } as TablesUpdate<"shared_transactions">)
-    .eq("id", transactionId)
-    .select("*")
-    .single()
-  if (error) throw new Error(error.message)
-  return data!
-}
-
 /**
  * Build a transaction-form-shaped projection from an existing transaction —
  * used to initialize the edit form.
@@ -213,5 +159,3 @@ export function transactionToFormValues(t: Transaction) {
     customShares: (t.custom_shares as Record<string, number> | null) ?? null,
   }
 }
-
-export { PENDING_MARKER }

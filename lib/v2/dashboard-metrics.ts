@@ -31,8 +31,6 @@ export type DashboardMetrics = {
   userTransactions: Transaction[]
   /** After date/search filters applied. */
   filteredTransactions: Transaction[]
-  /** Pending transactions (paid_by === PENDING_MARKER). */
-  pendingRequests: Transaction[]
   /** Period totals derived from filteredTransactions. */
   periodStats: {
     mySpend: number
@@ -105,13 +103,11 @@ export function computeDashboardMetrics(args: {
   // page can opt-in to "see everything" via `viewAll`.
   const isAdmin = isAdminUser(currentUser)
   const seesAll = isAdmin && args.viewAll === true
-  const pendingRequests: Transaction[] = []
   const userTransactions: Transaction[] = []
   for (const t of transactions) {
-    if (t.paid_by === PENDING_MARKER) {
-      pendingRequests.push(t)
-      continue
-    }
+    // Defensivo: linhas legadas marcadas como cobrança pendente (sistema de
+    // "solicitar pagamento" removido) ficam fora de todos os cálculos.
+    if (t.paid_by === PENDING_MARKER) continue
     if (seesAll) {
       userTransactions.push(t)
     } else if (
@@ -257,7 +253,6 @@ export function computeDashboardMetrics(args: {
   return {
     userTransactions,
     filteredTransactions,
-    pendingRequests,
     periodStats: {
       mySpend,
       totalSpend,

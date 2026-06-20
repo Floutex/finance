@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { HandCoins, Plus, ScanLine, Sparkles } from "lucide-react"
+import { Plus, ScanLine, Sparkles } from "lucide-react"
 import type { RowSelectionState } from "@tanstack/react-table"
 import dynamic from "next/dynamic"
 
@@ -28,8 +28,6 @@ import {
   BulkAdvancedEditDialog,
   BulkQuickEditDialog,
 } from "@/components/v2/transactions/bulk-edit-dialogs"
-import { PendingRequests } from "@/components/v2/transactions/pending-requests"
-import { RequestDialog } from "@/components/v2/transactions/request-dialog"
 import { Fab } from "@/components/v2/layout/fab"
 import type { Tables } from "@/lib/database.types"
 
@@ -187,10 +185,6 @@ export default function DashboardPage() {
             <ScanLine />
             Analisar recibo
           </Button>
-          <Button variant="outline" onClick={() => m.setRequestOpen(true)}>
-            <HandCoins />
-            Solicitar
-          </Button>
           <Button variant="outline" onClick={() => triggerCmdK()}>
             <Sparkles />
             <span>Quick-add</span>
@@ -214,14 +208,6 @@ export default function DashboardPage() {
             currentUser={user!}
             effectiveFilters={effectiveFilters}
             daysInPeriod={daysInPeriod}
-          />
-
-          <PendingRequests
-            requests={metrics!.pendingRequests}
-            participants={participants}
-            markingPaidIds={m.markingPaidIds}
-            onMarkPaid={m.handleMarkPaid}
-            onCreate={() => m.setRequestOpen(true)}
           />
 
           <TransactionsWorkspace
@@ -315,12 +301,6 @@ export default function DashboardPage() {
         count={selectedIds.length}
         pending={m.bulkPending}
         onConfirm={m.handleBulkAdvancedEdit}
-      />
-
-      <RequestDialog
-        open={m.requestOpen}
-        onOpenChange={m.setRequestOpen}
-        onSubmit={m.handleCreateRequest}
       />
 
       <ReceiptAnalyzeSheet
