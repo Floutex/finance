@@ -15,7 +15,6 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "Gastos Compartilhados",
   description: "Dashboard compartilhado de despesas",
-  icons: { icon: "/icon.svg" },
 }
 
 export const viewport: Viewport = {
