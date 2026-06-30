@@ -107,6 +107,7 @@ export function DashboardOverview({
                 .map((t) => ({
                   category: t.description?.trim() || "Sem descrição",
                   total: t.amount ?? 0,
+                  date: t.date,
                 }))
             }
           />
@@ -126,6 +127,8 @@ export function DashboardOverview({
                 .map((t) => ({
                   category: t.description?.trim() || "Sem descrição",
                   total: t.amount ?? 0,
+                  date: t.date,
+                  who: t.paid_by,
                 }))
             }
           />

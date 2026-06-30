@@ -10,7 +10,35 @@ import { ChartTooltip } from "@/components/v2/charts/chart-tooltip"
 import { chartPalette } from "@/lib/v2/tokens"
 import { cn } from "@/components/v2/primitives/utils"
 
-export type CategoryTotal = { category: string; total: number }
+export type CategoryTotal = {
+  category: string
+  total: number
+  /** Drill-down only: the transaction's date (yyyy-MM-dd)… */
+  date?: string
+  /** …and who paid it. Both render as a minimal meta line on the row. */
+  who?: string
+}
+
+const MONTHS_PT = [
+  "jan", "fev", "mar", "abr", "mai", "jun",
+  "jul", "ago", "set", "out", "nov", "dez",
+]
+
+/** "2026-06-14" → "14 jun". Parsed by parts to dodge timezone drift. */
+function formatShortDate(iso?: string): string | null {
+  if (!iso) return null
+  const [y, m, d] = iso.split("-").map(Number)
+  if (!y || !m || !d) return null
+  return `${d} ${MONTHS_PT[m - 1]}`
+}
+
+/** Joins date + payer into one muted line: "14 jun · Maria". */
+function rowMeta(row: CategoryTotal): string | null {
+  const parts = [formatShortDate(row.date), row.who?.trim() || null].filter(
+    Boolean
+  )
+  return parts.length ? parts.join(" · ") : null
+}
 
 type CategoryPieChartProps = {
   data: CategoryTotal[]
@@ -172,10 +200,13 @@ export function CategoryPieChart({
                   ))}
                 </Pie>
                 <Tooltip
+                  allowEscapeViewBox={{ x: true, y: true }}
+                  wrapperStyle={{ zIndex: 50, outline: "none" }}
                   content={({ active, payload }) => {
                     if (!active || !payload?.length) return null
                     const slice = payload[0].payload as CategoryTotal
                     const pct = total > 0 ? (slice.total / total) * 100 : 0
+                    const meta = rowMeta(slice)
                     return (
                       <ChartTooltip title={slice.category}>
                         <div className="flex items-center justify-between gap-3">
@@ -184,6 +215,11 @@ export function CategoryPieChart({
                             {pct.toFixed(1)}%
                           </span>
                         </div>
+                        {meta && (
+                          <div className="mt-1 text-[10px] text-muted-foreground">
+                            {meta}
+                          </div>
+                        )}
                         {clickable && slice.category !== "Outros" && (
                           <div className="mt-1 text-[10px] text-muted-foreground">
                             Clique para detalhar
@@ -207,14 +243,15 @@ export function CategoryPieChart({
             {slices.map((s, i) => {
               const pct = total > 0 ? (s.total / total) * 100 : 0
               const isClickableRow = clickable && s.category !== "Outros"
+              const meta = rowMeta(s)
               return (
-                <li key={s.category}>
+                <li key={`${s.category}-${i}`}>
                   <button
                     type="button"
                     disabled={!isClickableRow}
                     onClick={() => handleSliceClick(s)}
                     className={cn(
-                      "flex w-full items-center gap-2 rounded-sm text-left",
+                      "flex w-full items-center gap-2 rounded-sm py-0.5 text-left",
                       isClickableRow && "hover:bg-accent/40 cursor-pointer",
                       !isClickableRow && "cursor-default"
                     )}
@@ -225,7 +262,14 @@ export function CategoryPieChart({
                         backgroundColor: chartPalette[i % chartPalette.length],
                       }}
                     />
-                    <span className="min-w-0 flex-1 truncate">{s.category}</span>
+                    <span className="min-w-0 flex-1 leading-tight">
+                      <span className="block truncate">{s.category}</span>
+                      {meta && (
+                        <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
+                          {meta}
+                        </span>
+                      )}
+                    </span>
                     <span className="tabular-nums text-muted-foreground">
                       {pct.toFixed(0)}%
                     </span>
