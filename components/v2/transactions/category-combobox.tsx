@@ -80,7 +80,6 @@ export function CategoryCombobox({
 
   return (
     <Popover
-      modal
       open={open}
       onOpenChange={(o) => {
         setOpen(o)
