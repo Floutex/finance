@@ -8,6 +8,7 @@ import { cn } from "@/components/v2/primitives/utils"
 import { Button } from "@/components/v2/primitives/button"
 import { Sheet, SheetContent, SheetTitle } from "@/components/v2/primitives/sheet"
 import { MobileSidebar } from "@/components/v2/layout/mobile-sidebar"
+import { BrandIcon } from "@/components/v2/brand/brand-icon"
 import type { SidebarSecondaryNav } from "@/components/v2/layout/sidebar"
 import type { NavItem } from "@/components/v2/layout/nav-section"
 
@@ -53,11 +54,9 @@ export function MobileTopbar({
           <Menu className="size-5" />
         </Button>
         <Link href={brandHref} className="flex items-center gap-2">
-          <div className="grid size-7 place-items-center rounded-md bg-primary text-primary-foreground font-display text-sm font-bold">
-            G
-          </div>
+          <BrandIcon className="size-7" />
           <span className="text-sm font-semibold">
-            Gastos<span className="text-muted-foreground">.</span>
+            Dividc<span className="text-muted-foreground">.</span>
           </span>
         </Link>
         <div className="ml-auto">{rightSlot}</div>

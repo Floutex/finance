@@ -13,8 +13,8 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: "Gastos Compartilhados",
-  description: "Dashboard compartilhado de despesas",
+  title: "Dividc",
+  description: "Divisão de despesas compartilhadas",
 }
 
 export const viewport: Viewport = {

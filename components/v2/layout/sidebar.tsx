@@ -15,6 +15,8 @@ import {
 } from "@/components/v2/primitives/tooltip"
 import { NavSection, type NavItem } from "@/components/v2/layout/nav-section"
 
+import { BrandIcon } from "@/components/v2/brand/brand-icon"
+
 const STORAGE_KEY = "v2:sidebar-collapsed"
 
 export type SidebarSecondaryNav = {
@@ -25,9 +27,7 @@ export type SidebarSecondaryNav = {
 export type SidebarProps = {
   primaryNav: NavItem[]
   secondaryNav?: SidebarSecondaryNav | null
-  /** Footer slot — receives the current collapsed state. */
   footer: (collapsed: boolean) => React.ReactNode
-  /** Where the brand block links to. Defaults to `/dashboard`. */
   brandHref?: string
 }
 
@@ -39,20 +39,23 @@ export function Sidebar({
 }: SidebarProps) {
   const [collapsed, setCollapsed] = React.useState(false)
 
-  // Hydrate the user's last preference once we're on the client.
   React.useEffect(() => {
     try {
-      const stored = window.localStorage.getItem(STORAGE_KEY)
-      if (stored === "1") setCollapsed(true)
-    } catch {}
+      const stored = localStorage.getItem(STORAGE_KEY)
+      if (stored !== null) setCollapsed(stored === "1")
+    } catch {
+      // ignore
+    }
   }, [])
 
   const toggle = () => {
     setCollapsed((prev) => {
       const next = !prev
       try {
-        window.localStorage.setItem(STORAGE_KEY, next ? "1" : "0")
-      } catch {}
+        localStorage.setItem(STORAGE_KEY, next ? "1" : "0")
+      } catch {
+        // ignore
+      }
       return next
     })
   }
@@ -70,12 +73,10 @@ export function Sidebar({
           className="flex items-center gap-2 overflow-hidden"
           aria-label="Ir para o dashboard"
         >
-          <div className="grid size-8 shrink-0 place-items-center rounded-md bg-primary text-primary-foreground font-display font-bold">
-            G
-          </div>
+          <BrandIcon />
           {!collapsed && (
             <span className="truncate text-sm font-semibold">
-              Gastos<span className="text-muted-foreground">.</span>
+              Dividc<span className="text-muted-foreground">.</span>
             </span>
           )}
         </Link>
