@@ -76,7 +76,7 @@ export function Sidebar({
           <BrandIcon />
           {!collapsed && (
             <span className="truncate text-sm font-semibold">
-              Dividc<span className="text-muted-foreground">.</span>
+              Zera<span className="text-muted-foreground">.</span>
             </span>
           )}
         </Link>

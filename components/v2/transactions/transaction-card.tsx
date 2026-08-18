@@ -42,7 +42,7 @@ export function TransactionCard({
     <div
       onClick={onClick}
       className={cn(
-        "surface-1 flex items-start gap-3 rounded-xl p-3",
+        "surface-1 flex items-start gap-3 rounded-lg p-3",
         onClick && "cursor-pointer hover:bg-accent/40",
         selected && "ring-1 ring-primary",
         className

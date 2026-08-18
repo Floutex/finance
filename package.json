@@ -1,5 +1,5 @@
 {
-  "name": "dividc",
+  "name": "zera",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -29,6 +29,8 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.0.4",
     "date-fns": "^3.6.0",
+    "echarts": "^6.1.0",
+    "echarts-for-react": "^3.0.6",
     "lucide-react": "^0.446.0",
     "next": "^16.0.8",
     "openai": "^4.0.0",

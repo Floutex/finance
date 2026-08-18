@@ -87,7 +87,7 @@ export function InviteGenerator({ className }: InviteGeneratorProps) {
     <>
       <div
         className={cn(
-          "surface-2 flex flex-col gap-4 rounded-2xl p-5",
+          "surface-2 flex flex-col gap-4 rounded-lg p-5",
           className
         )}
       >

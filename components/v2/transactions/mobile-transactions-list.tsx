@@ -48,10 +48,10 @@ export function MobileTransactionsList({
     <div className={cn("flex flex-col gap-2", className)}>
       {loading ? (
         Array.from({ length: 6 }).map((_, i) => (
-          <Skeleton key={i} className="h-20 rounded-xl" />
+          <Skeleton key={i} className="h-20 rounded-lg" />
         ))
       ) : transactions.length === 0 ? (
-        <div className="surface-1 rounded-xl px-4 py-8 text-center text-sm text-muted-foreground">
+        <div className="surface-1 rounded-lg px-4 py-8 text-center text-sm text-muted-foreground">
           Nenhuma transação no período selecionado.
         </div>
       ) : (

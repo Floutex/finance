@@ -34,7 +34,7 @@ export function PlaceholderPage({
         )}
       </header>
 
-      <div className="surface-1 flex w-full items-center gap-4 rounded-xl p-5">
+      <div className="surface-1 flex w-full items-center gap-4 rounded-lg p-5">
         <div className="grid size-10 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
           <Construction className="size-5" />
         </div>

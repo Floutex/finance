@@ -103,7 +103,7 @@ export function DataTable<TData, TValue>({
     <div className={cn("flex flex-col gap-3", className)}>
       {toolbar?.(table)}
 
-      <div className="surface-1 overflow-hidden rounded-xl">
+      <div className="surface-1 overflow-hidden rounded-lg">
         <div className="relative w-full overflow-auto">
           <table className="w-full caption-bottom text-sm">
             <thead className="border-b border-border [&_tr]:border-b">

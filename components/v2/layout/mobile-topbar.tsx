@@ -56,7 +56,7 @@ export function MobileTopbar({
         <Link href={brandHref} className="flex items-center gap-2">
           <BrandIcon className="size-7" />
           <span className="text-sm font-semibold">
-            Dividc<span className="text-muted-foreground">.</span>
+            Zera<span className="text-muted-foreground">.</span>
           </span>
         </Link>
         <div className="ml-auto">{rightSlot}</div>

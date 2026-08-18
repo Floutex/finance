@@ -1,13 +1,12 @@
 "use client"
 
 import * as React from "react"
+import dynamic from "next/dynamic"
 import { ArrowLeft } from "lucide-react"
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts"
 
 import { Button } from "@/components/v2/primitives/button"
 import { Currency } from "@/components/v2/finance/currency"
-import { ChartTooltip } from "@/components/v2/charts/chart-tooltip"
-import { chartPalette } from "@/lib/v2/tokens"
+import { monochromeChartPalette, formatCurrency } from "@/lib/v2/tokens"
 import { cn } from "@/components/v2/primitives/utils"
 
 export type CategoryTotal = {
@@ -40,6 +39,15 @@ function rowMeta(row: CategoryTotal): string | null {
   return parts.length ? parts.join(" · ") : null
 }
 
+const ECharts = dynamic(() => import("./echarts-runtime"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-40 w-full items-center justify-center text-[12px] italic text-muted-foreground">
+      carregando gráfico…
+    </div>
+  ),
+})
+
 type CategoryPieChartProps = {
   data: CategoryTotal[]
   title?: string
@@ -66,6 +74,7 @@ export function CategoryPieChart({
   drilldownLabel = "Top transações",
 }: CategoryPieChartProps) {
   const [selected, setSelected] = React.useState<string | null>(null)
+  const echartsRef = React.useRef<any>(null)
 
   // Reset drill-down when the upstream data changes (e.g. filter applied).
   React.useEffect(() => {
@@ -88,17 +97,22 @@ export function CategoryPieChart({
       return k === "outros" || k === "outro" || k === "outras"
     }
 
-    const merged = new Map<string, number>()
+    const merged = new Map<string, { total: number; row: CategoryTotal }>()
     let existingOthers = 0
     for (const item of sourceData) {
       if (isOthers(item.category)) {
         existingOthers += item.total
       } else {
-        merged.set(item.category, (merged.get(item.category) ?? 0) + item.total)
+        const prev = merged.get(item.category)
+        if (prev) {
+          prev.total += item.total
+        } else {
+          merged.set(item.category, { total: item.total, row: item })
+        }
       }
     }
-    const sorted = Array.from(merged.entries())
-      .map(([category, total]) => ({ category, total }))
+    const sorted = Array.from(merged.values())
+      .map((x) => ({ ...x.row, total: x.total }))
       .sort((a, b) => b.total - a.total)
 
     let slices: CategoryTotal[]
@@ -123,12 +137,123 @@ export function CategoryPieChart({
 
   const handleSliceClick = (slice: CategoryTotal) => {
     if (!clickable) return
-    if (slice.category === "Outros") return // collapsed group — skip
+    if (slice.category === "Outros") return
     setSelected(slice.category)
   }
 
+  const handleChartReady = React.useCallback((instance: any) => {
+    echartsRef.current = instance
+  }, [])
+
+  const handleMouseEnterRow = (index: number) => {
+    if (!echartsRef.current) return
+    echartsRef.current.dispatchAction({
+      type: "highlight",
+      dataIndex: index,
+    })
+    echartsRef.current.dispatchAction({
+      type: "showTip",
+      dataIndex: index,
+      seriesIndex: 0,
+    })
+  }
+
+  const handleMouseLeaveRow = (index: number) => {
+    if (!echartsRef.current) return
+    echartsRef.current.dispatchAction({
+      type: "downplay",
+      dataIndex: index,
+    })
+    echartsRef.current.dispatchAction({
+      type: "hideTip",
+    })
+  }
+
+  const pieOption = React.useMemo(() => {
+    return {
+      animationDuration: 400,
+      animationEasing: "quartOut",
+      tooltip: {
+        trigger: "item",
+        backgroundColor: "rgba(18, 18, 22, 0.96)",
+        borderColor: "rgba(255, 255, 255, 0.1)",
+        borderWidth: 1,
+        padding: [8, 12],
+        textStyle: { color: "#e4e4e7", fontSize: 12 },
+        formatter: (params: { dataIndex: number; name: string; value: number; percent: number }) => {
+          if (!params || !params.name) return ""
+          const slice = slices[params.dataIndex]
+          const meta = slice ? rowMeta(slice) : null
+          const pct = total > 0 ? ((params.value / total) * 100).toFixed(1) : "0"
+          const formattedCurrency = formatCurrency(params.value)
+
+          let html = `<div style="font-weight:600;color:#fafafa;margin-bottom:3px">${params.name}</div>`
+          html += `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px">`
+          html += `<span style="font-family:ui-monospace,monospace;color:#ffffff;font-weight:600">${formattedCurrency}</span>`
+          html += `<span style="color:#a1a1aa;font-size:11px">${pct}%</span>`
+          html += `</div>`
+
+          if (meta) {
+            html += `<div style="margin-top:4px;font-size:10px;color:#a1a1aa">${meta}</div>`
+          }
+
+          if (clickable && params.name !== "Outros") {
+            html += `<div style="margin-top:6px;padding-top:4px;border-top:1px solid rgba(255,255,255,0.08);font-size:10.5px;color:#71717a">Clique para detalhar</div>`
+          }
+
+          return html
+        },
+      },
+      color: monochromeChartPalette,
+      series: [
+        {
+          type: "pie",
+          radius: ["62%", "86%"],
+          center: ["50%", "50%"],
+          avoidLabelOverlap: true,
+          itemStyle: {
+            borderRadius: 3,
+            borderColor: "#16161a",
+            borderWidth: 2,
+          },
+          label: {
+            show: false,
+          },
+          labelLine: {
+            show: false,
+          },
+          emphasis: {
+            scale: true,
+            scaleSize: 4,
+            itemStyle: {
+              shadowBlur: 10,
+              shadowOffsetX: 0,
+              shadowColor: "rgba(0, 0, 0, 0.6)",
+            },
+          },
+          data: slices.map((s) => ({
+            name: s.category,
+            value: s.total,
+          })),
+        },
+      ],
+    }
+  }, [slices, total, clickable])
+
+  const onChartEvents = React.useMemo(
+    () => ({
+      click: (params: { name?: string }) => {
+        if (!clickable || !params?.name) return
+        if (params.name === "Outros") return
+        const target = slices.find((s) => s.category === params.name)
+        if (target) handleSliceClick(target)
+      },
+    }),
+    [clickable, slices]
+  )
+
   return (
-    <div className={cn("surface-1 flex flex-col gap-4 rounded-xl p-5", className)}>
+    <div className={cn("surface-1 flex flex-col gap-4 rounded-lg p-5", className)}>
       <header className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           {isDrilling ? (
@@ -147,7 +272,7 @@ export function CategoryPieChart({
             </>
           )}
         </div>
-        {isDrilling && (
+        {isDrilling ? (
           <Button
             type="button"
             variant="ghost"
@@ -158,6 +283,13 @@ export function CategoryPieChart({
             <ArrowLeft className="size-3.5" />
             Voltar
           </Button>
+        ) : (
+          clickable &&
+          slices.length > 0 && (
+            <span className="hidden text-[11px] text-muted-foreground sm:inline-block">
+              clique na fatia para detalhar
+            </span>
+          )
         )}
       </header>
 
@@ -166,116 +298,68 @@ export function CategoryPieChart({
           {isDrilling ? "Sem transações nessa categoria" : "Sem dados no período"}
         </div>
       ) : (
-        <div className="grid grid-cols-[176px_1fr] items-center gap-5">
-          <div className="relative h-44 w-44">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={slices}
-                  dataKey="total"
-                  nameKey="category"
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={54}
-                  outerRadius={84}
-                  paddingAngle={2}
-                  strokeWidth={0}
-                  isAnimationActive={false}
-                  onClick={
-                    clickable
-                      ? (entry: unknown) => {
-                          const payload = (entry as { payload?: CategoryTotal })
-                            .payload
-                          if (payload) handleSliceClick(payload)
-                        }
-                      : undefined
-                  }
-                  cursor={clickable ? "pointer" : "default"}
-                >
-                  {slices.map((_, i) => (
-                    <Cell
-                      key={i}
-                      fill={chartPalette[i % chartPalette.length]}
-                    />
-                  ))}
-                </Pie>
-                <Tooltip
-                  allowEscapeViewBox={{ x: true, y: true }}
-                  wrapperStyle={{ zIndex: 50, outline: "none" }}
-                  content={({ active, payload }) => {
-                    if (!active || !payload?.length) return null
-                    const slice = payload[0].payload as CategoryTotal
-                    const pct = total > 0 ? (slice.total / total) * 100 : 0
-                    const meta = rowMeta(slice)
-                    return (
-                      <ChartTooltip title={slice.category}>
-                        <div className="flex items-center justify-between gap-3">
-                          <Currency value={slice.total} />
-                          <span className="text-muted-foreground">
-                            {pct.toFixed(1)}%
-                          </span>
-                        </div>
-                        {meta && (
-                          <div className="mt-1 text-[10px] text-muted-foreground">
-                            {meta}
-                          </div>
-                        )}
-                        {clickable && slice.category !== "Outros" && (
-                          <div className="mt-1 text-[10px] text-muted-foreground">
-                            Clique para detalhar
-                          </div>
-                        )}
-                      </ChartTooltip>
-                    )
-                  }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
+        <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-center">
+          <div className="relative size-36 shrink-0 sm:size-40">
+            <ECharts
+              option={pieOption}
+              style={{ height: "100%", width: "100%" }}
+              notMerge
+              lazyUpdate
+              opts={{ renderer: "canvas" }}
+              onEvents={onChartEvents}
+              onChartReady={handleChartReady}
+            />
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              <span className="text-[9px] font-medium uppercase tracking-widest text-muted-foreground">
                 Total
               </span>
-              <Currency value={total} className="text-sm font-semibold" />
+              <Currency
+                value={total}
+                className="max-w-[90px] truncate text-xs font-semibold tracking-tight text-foreground sm:max-w-[100px]"
+              />
             </div>
           </div>
 
-          <ul className="flex flex-col gap-1.5 text-xs">
+          <ul className="flex min-w-0 flex-1 w-full flex-col gap-1 text-xs">
             {slices.map((s, i) => {
               const pct = total > 0 ? (s.total / total) * 100 : 0
               const isClickableRow = clickable && s.category !== "Outros"
               const meta = rowMeta(s)
+              const color =
+                monochromeChartPalette[i % monochromeChartPalette.length]
               return (
                 <li key={`${s.category}-${i}`}>
                   <button
                     type="button"
                     disabled={!isClickableRow}
-                    onClick={() => handleSliceClick(s)}
+                    onClick={() => isClickableRow && handleSliceClick(s)}
+                    onMouseEnter={() => handleMouseEnterRow(i)}
+                    onMouseLeave={() => handleMouseLeaveRow(i)}
                     className={cn(
-                      "flex w-full items-center gap-2 rounded-sm py-0.5 text-left",
-                      isClickableRow && "hover:bg-accent/40 cursor-pointer",
-                      !isClickableRow && "cursor-default"
+                      "group flex w-full items-center gap-2 rounded-sm px-1.5 py-0.5 text-left transition-colors",
+                      isClickableRow
+                        ? "cursor-pointer hover:bg-accent/40"
+                        : "cursor-default"
                     )}
                   >
                     <span
-                      className="size-2 shrink-0 rounded-sm"
-                      style={{
-                        backgroundColor: chartPalette[i % chartPalette.length],
-                      }}
+                      className="size-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: color }}
                     />
-                    <span className="min-w-0 flex-1 leading-tight">
-                      <span className="block truncate">{s.category}</span>
-                      {meta && (
-                        <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
-                          {meta}
-                        </span>
-                      )}
+                    <span className="min-w-0 flex-1 truncate text-foreground group-hover:text-foreground">
+                      {s.category}
                     </span>
-                    <span className="tabular-nums text-muted-foreground">
+                    {meta && (
+                      <span className="hidden xl:inline shrink-0 text-[10px] text-muted-foreground">
+                        {meta}
+                      </span>
+                    )}
+                    <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
                       {pct.toFixed(0)}%
                     </span>
                     <Currency
                       value={s.total}
-                      className="w-24 text-right tabular-nums"
+                      className="shrink-0 text-right text-xs font-medium tabular-nums text-foreground"
                     />
                   </button>
                 </li>

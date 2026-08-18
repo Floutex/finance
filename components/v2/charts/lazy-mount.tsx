@@ -49,7 +49,7 @@ export function LazyMount({
 
   return (
     <div ref={ref} style={{ minHeight }} className={className}>
-      {visible ? children : <Skeleton style={{ height: minHeight }} className="w-full rounded-xl" />}
+      {visible ? children : <Skeleton style={{ height: minHeight }} className="w-full rounded-lg" />}
     </div>
   )
 }

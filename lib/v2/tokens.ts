@@ -72,18 +72,20 @@ export function participantAvatar(hex: string) {
 }
 
 // ── Chart palette ───────────────────────────────────────────────────────────
-// Used for category pie series and any chart that needs a deterministic series
-// color. Order is intentional: cool → warm.
-export const chartPalette = [
-  "hsl(210 90% 60%)",
-  "hsl(270 80% 65%)",
-  "hsl(140 70% 50%)",
-  "hsl(28 90% 58%)",
-  "hsl(195 85% 50%)",
-  "hsl(45 95% 55%)",
-  "hsl(330 75% 60%)",
-  "hsl(0 70% 55%)",
+// Monochromatic grayscale/zinc palette for category breakdowns.
+// High-contrast alternating steps ensuring adjacent slices never blend.
+export const monochromeChartPalette = [
+  "#f4f4f5", // Zinc 100 (Bright)
+  "#71717a", // Zinc 500 (Mid)
+  "#d4d4d8", // Zinc 300 (Light silver)
+  "#3f3f46", // Zinc 700 (Charcoal)
+  "#a1a1aa", // Zinc 400 (Slate)
+  "#27272a", // Zinc 800 (Dark graphite)
+  "#e4e4e7", // Zinc 200 (Cool white)
+  "#52525b", // Zinc 600 (Deep zinc)
 ] as const
+
+export const chartPalette = monochromeChartPalette
 
 // ── Numeric formatting ──────────────────────────────────────────────────────
 // Re-exports from lib/constants to keep imports centralized for v2 consumers.

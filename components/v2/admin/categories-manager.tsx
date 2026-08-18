@@ -171,7 +171,7 @@ export function CategoriesManager({ actor }: Props) {
         </Button>
       </header>
 
-      <div className="surface-1 overflow-hidden rounded-xl">
+      <div className="surface-1 overflow-hidden rounded-lg">
         <div className="border-b border-border p-3">
           <div className="relative max-w-xs">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />

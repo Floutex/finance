@@ -225,7 +225,7 @@ export function ParticipantsManager() {
 
       <InviteGenerator />
 
-      <div className="surface-1 overflow-hidden rounded-xl">
+      <div className="surface-1 overflow-hidden rounded-lg">
         {loading ? (
           <ul className="divide-y divide-border">
             {Array.from({ length: 4 }).map((_, i) => (

@@ -1,3 +1,5 @@
+"use client"
+
 import * as React from "react"
 
 import { cn } from "@/components/v2/primitives/utils"
@@ -24,7 +26,7 @@ export function BalanceCard({ totalBalance, className }: BalanceCardProps) {
   return (
     <div
       className={cn(
-        "surface-2 flex flex-col gap-3 rounded-2xl p-6",
+        "surface-2 flex flex-col gap-3 rounded-lg p-6",
         className
       )}
     >
@@ -46,6 +48,7 @@ export function BalanceCard({ totalBalance, className }: BalanceCardProps) {
         value={totalBalance}
         display
         signed
+        animated
         className="text-5xl md:text-6xl"
       />
     </div>

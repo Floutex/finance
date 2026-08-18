@@ -133,7 +133,7 @@ export function AuditLog() {
         </p>
       </header>
 
-      <div className="surface-1 grid gap-3 rounded-xl p-4 md:grid-cols-4">
+      <div className="surface-1 grid gap-3 rounded-lg p-4 md:grid-cols-4">
         <div className="space-y-1">
           <Label htmlFor="audit-actor" className="text-xs text-muted-foreground">
             Ator
@@ -186,7 +186,7 @@ export function AuditLog() {
         </div>
       </div>
 
-      <div className="surface-1 overflow-hidden rounded-xl">
+      <div className="surface-1 overflow-hidden rounded-lg">
         {loading && rows.length === 0 ? (
           <ul className="divide-y divide-border">
             {Array.from({ length: 6 }).map((_, i) => (

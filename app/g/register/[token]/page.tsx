@@ -70,7 +70,7 @@ export default function GuestRegisterPage({
   if (personalToken) {
     return (
       <div className="grid min-h-screen place-items-center px-6">
-        <div className="surface-2 flex w-full max-w-lg flex-col gap-6 rounded-2xl p-8">
+        <div className="surface-2 flex w-full max-w-lg flex-col gap-6 rounded-xl p-8">
           <div className="space-y-3 text-center">
             <div
               className="mx-auto flex size-16 items-center justify-center rounded-full text-2xl font-bold"
@@ -113,7 +113,7 @@ export default function GuestRegisterPage({
     <div className="grid min-h-screen place-items-center px-6">
       <form
         onSubmit={submit}
-        className="surface-2 flex w-full max-w-md flex-col gap-5 rounded-2xl p-8"
+        className="surface-2 flex w-full max-w-md flex-col gap-5 rounded-xl p-8"
       >
         <div className="space-y-1 text-center">
           <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">

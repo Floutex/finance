@@ -1,3 +1,5 @@
+"use client"
+
 import * as React from "react"
 import { cn } from "@/components/v2/primitives/utils"
 import { Currency } from "@/components/v2/finance/currency"
@@ -14,6 +16,8 @@ type MetricCardProps = {
   icon?: React.ReactNode
   /** Sign-color the main value (positive → success, negative → destructive). */
   signed?: boolean
+  /** Animate number changes. Defaults to true. */
+  animated?: boolean
   /** Render arbitrary content in place of the formatted value. */
   children?: React.ReactNode
   className?: string
@@ -30,6 +34,7 @@ export function MetricCard({
   trend,
   icon,
   signed = false,
+  animated = true,
   children,
   className,
 }: MetricCardProps) {
@@ -38,7 +43,7 @@ export function MetricCard({
       className={cn(
         // h-full + the parent grid's items-stretch keeps every card at the
         // same height regardless of content length.
-        "surface-1 flex h-full flex-col gap-3 rounded-xl p-5",
+        "surface-1 flex h-full flex-col gap-3 rounded-lg p-5",
         className
       )}
     >
@@ -53,7 +58,12 @@ export function MetricCard({
       <div className="flex min-h-[2.25rem] items-baseline gap-2">
         {children ?? (
           typeof value === "number" ? (
-            <Currency value={value} display signed={signed} />
+            <Currency
+              value={value}
+              display
+              signed={signed}
+              animated={animated}
+            />
           ) : (
             <span className="font-display text-3xl font-semibold text-muted-foreground">—</span>
           )

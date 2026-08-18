@@ -199,7 +199,7 @@ export default function TransactionsPage() {
       {isLoading ? (
         <div className="flex flex-col gap-3">
           <Skeleton className="h-10 w-full rounded-md" />
-          <Skeleton className="h-[600px] w-full rounded-xl" />
+          <Skeleton className="h-[600px] w-full rounded-lg" />
         </div>
       ) : (
         <TransactionsWorkspace

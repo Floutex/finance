@@ -81,8 +81,8 @@ export function IncomeManager() {
 
       {loading ? (
         <div className="flex flex-col gap-4">
-          <Skeleton className="h-72 rounded-xl" />
-          <Skeleton className="h-72 rounded-xl" />
+          <Skeleton className="h-72 rounded-lg" />
+          <Skeleton className="h-72 rounded-lg" />
         </div>
       ) : (
         <div className="flex flex-col gap-4">

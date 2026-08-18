@@ -36,7 +36,7 @@ export function MobileSidebar({
         <Link href={brandHref} onClick={onNavigate} className="flex items-center gap-2">
           <BrandIcon />
           <span className="text-sm font-semibold">
-            Dividc<span className="text-muted-foreground">.</span>
+            Zera<span className="text-muted-foreground">.</span>
           </span>
         </Link>
       </div>

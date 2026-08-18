@@ -1,20 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-label="Dividc">
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-label="Zera">
+  <style>
+    .circle-stroke { stroke: #09090b; }
+    .lens-fill { fill: #09090b; }
+    @media (prefers-color-scheme: dark) {
+      .circle-stroke { stroke: #ffffff; }
+      .lens-fill { fill: #ffffff; }
+    }
+  </style>
   <defs>
-    <linearGradient id="tile" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#6E7FF1"/>
-      <stop offset="1" stop-color="#4E5ED7"/>
-    </linearGradient>
     <clipPath id="lens">
-      <circle cx="12.9" cy="16" r="7"/>
+      <circle cx="11.5" cy="16" r="8.5"/>
     </clipPath>
   </defs>
 
-  <rect width="32" height="32" rx="8" fill="url(#tile)"/>
-  <rect x="0.75" y="0.75" width="30.5" height="30.5" rx="7.25" fill="none" stroke="#FFFFFF" stroke-opacity="0.10"/>
-
-  <g fill="none" stroke="#F4F5FD" stroke-width="2.4">
-    <circle cx="12.9" cy="16" r="7"/>
-    <circle cx="19.1" cy="16" r="7"/>
+  <g fill="none" class="circle-stroke" stroke-width="2.2">
+    <circle cx="11.5" cy="16" r="8.5"/>
+    <circle cx="20.5" cy="16" r="8.5"/>
   </g>
-  <circle cx="19.1" cy="16" r="7" fill="#F4F5FD" clip-path="url(#lens)"/>
+  <circle cx="20.5" cy="16" r="8.5" class="lens-fill" clip-path="url(#lens)"/>
 </svg>
