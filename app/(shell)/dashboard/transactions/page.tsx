@@ -11,9 +11,8 @@ import { useMonthlyIncomes } from "@/hooks/use-monthly-incomes"
 import { useSessionUser } from "@/hooks/use-session-user"
 import { useDashboardData } from "@/hooks/use-dashboard-data"
 import { useDashboardMutations } from "@/hooks/use-dashboard-mutations"
+import { useUserPermissions } from "@/hooks/use-user-permissions"
 import { useHotkeys } from "@/hooks/use-hotkeys"
-
-import { isAdminUser } from "@/lib/constants"
 
 import { Button } from "@/components/v2/primitives/button"
 import { Skeleton } from "@/components/v2/primitives/skeleton"
@@ -60,9 +59,13 @@ export default function TransactionsPage() {
     loading: pLoading,
   } = useParticipants()
   const { incomes, loading: incLoading } = useMonthlyIncomes()
+  const { permissions } = useUserPermissions(user)
 
   const memberNames = React.useMemo(() => members.map((m) => m.name), [members])
-  const isAdmin = isAdminUser(user)
+  const isAdmin = permissions.isAdmin
+  const canEditPayer = permissions.can_change_payer
+  const canManageCategories = permissions.can_manage_categories
+  const canDeleteOthers = permissions.can_delete_others_tx
 
   const [viewAll, setViewAll] = React.useState(false)
   const { toolbar, setToolbar, fullDateRange, metrics } = useDashboardData({
@@ -82,6 +85,7 @@ export default function TransactionsPage() {
   const m = useDashboardMutations({
     currentUser: user,
     isAdmin,
+    canDeleteOthers,
     filteredTransactions: metrics?.filteredTransactions,
     selectedIds,
     updateCache,
@@ -116,12 +120,14 @@ export default function TransactionsPage() {
     )
   )
 
+  // Show the skeleton only until ALL caches have finished their first load.
   const initialLoadComplete =
-    !!user && !txLoading && !pLoading && !incLoading && !!metrics
+    !!user && !txLoading && !pLoading && !incLoading && !metrics
   const hasShownContentRef = React.useRef(false)
   if (initialLoadComplete) hasShownContentRef.current = true
   const isLoading = !hasShownContentRef.current
 
+  // Drop selections that no longer exist (filters changed, etc.).
   React.useEffect(() => {
     if (selectedIds.length === 0) return
     const visible = new Set(metrics?.filteredTransactions.map((t) => t.id) ?? [])
@@ -143,12 +149,12 @@ export default function TransactionsPage() {
     (t: Transaction) => (
       <TransactionRowActions
         transaction={t}
-        canDelete={isAdmin || t.paid_by === user}
+        canDelete={isAdmin || canDeleteOthers || t.paid_by === user}
         onEdit={(transaction) => m.setSheetMode({ kind: "edit", transaction })}
         onDelete={(transaction) => m.setPendingDelete(transaction)}
       />
     ),
-    [isAdmin, user, m]
+    [isAdmin, canDeleteOthers, user, m]
   )
 
   return (
@@ -239,7 +245,8 @@ export default function TransactionsPage() {
             : "create"
         }
         currentUser={user ?? ""}
-        canEditPayer={isAdmin}
+        canEditPayer={canEditPayer}
+        allowCreateCategory={canManageCategories}
         createDefaults={{
           paid_by: user ?? undefined,
           participants: defaultParticipants,
@@ -291,7 +298,8 @@ export default function TransactionsPage() {
         open={m.receiptOpen}
         onOpenChange={m.setReceiptOpen}
         currentUser={user ?? ""}
-        canEditPayer={isAdmin}
+        canEditPayer={canEditPayer}
+        allowCreateCategory={canManageCategories}
         onSaved={m.handleReceiptSaved}
       />
 
@@ -300,7 +308,7 @@ export default function TransactionsPage() {
           currentUser={user}
           defaultParticipants={defaultParticipants}
           onCreateMany={m.handleCreateMany}
-          payerNames={isAdmin ? undefined : [user]}
+          payerNames={canEditPayer ? undefined : [user]}
         />
       )}
 

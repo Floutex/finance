@@ -21,6 +21,7 @@ type SheetMode = null | "create" | { kind: "edit"; transaction: Transaction }
 export type UseDashboardMutationsArgs = {
   currentUser: string | null
   isAdmin: boolean
+  canDeleteOthers?: boolean
   /** Filtered set used to validate bulk operations. */
   filteredTransactions: Transaction[] | undefined
   selectedIds: string[]
@@ -76,6 +77,7 @@ export type UseDashboardMutationsResult = {
 export function useDashboardMutations({
   currentUser,
   isAdmin,
+  canDeleteOthers = false,
   filteredTransactions,
   selectedIds,
   updateCache,
@@ -141,7 +143,8 @@ export function useDashboardMutations({
 
   const handleDelete = async () => {
     if (!currentUser || !pendingDelete) return
-    if (!isAdmin && pendingDelete.paid_by !== currentUser) {
+    const allowed = isAdmin || canDeleteOthers || pendingDelete.paid_by === currentUser
+    if (!allowed) {
       toast.error("Você só pode deletar transações que você pagou.")
       setPendingDelete(null)
       return
@@ -167,7 +170,11 @@ export function useDashboardMutations({
   const handleBulkDelete = async () => {
     if (!currentUser) return
     const unauthorized = filteredTransactions?.filter(
-      (t) => selectedIds.includes(t.id) && !isAdmin && t.paid_by !== currentUser
+      (t) =>
+        selectedIds.includes(t.id) &&
+        !isAdmin &&
+        !canDeleteOthers &&
+        t.paid_by !== currentUser
     )
     if (unauthorized && unauthorized.length > 0) {
       toast.error(

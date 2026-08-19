@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseClient } from "@/lib/supabase"
+import { parsePermissions, DEFAULT_PERMISSIONS } from "@/lib/permissions"
 
 function genToken(): string {
   const bytes = new Uint8Array(24)
@@ -9,16 +10,16 @@ function genToken(): string {
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/
 
-// GET → list all guests with their tokens, transaction count, last activity
+// GET → list all participants (members + guests) with their tokens, tx count, last activity, is_admin, permissions
 export async function GET() {
   const supabase = getSupabaseClient()
 
-  const [guestsRes, tokensRes, txRes] = await Promise.all([
+  const [participantsRes, tokensRes, txRes] = await Promise.all([
     supabase
       .from("participants")
-      .select("id,name,color,kind,is_archived,created_at")
-      .eq("kind", "guest")
-      .order("created_at", { ascending: false }),
+      .select("id,name,color,kind,is_admin,permissions,is_archived,created_at")
+      .order("kind", { ascending: true })
+      .order("name", { ascending: true }),
     supabase
       .from("participant_tokens")
       .select("token,kind,label,participant_id,created_at,revoked_at")
@@ -29,20 +30,20 @@ export async function GET() {
       .eq("is_hidden", false),
   ])
 
-  if (guestsRes.error) return NextResponse.json({ error: guestsRes.error.message }, { status: 500 })
+  if (participantsRes.error) return NextResponse.json({ error: participantsRes.error.message }, { status: 500 })
   if (tokensRes.error) return NextResponse.json({ error: tokensRes.error.message }, { status: 500 })
   if (txRes.error) return NextResponse.json({ error: txRes.error.message }, { status: 500 })
 
-  const guests = guestsRes.data ?? []
+  const participants = participantsRes.data ?? []
   const tokens = tokensRes.data ?? []
   const transactions = txRes.data ?? []
 
-  const items = guests.map(g => {
-    const guestTokens = tokens.filter(t => t.participant_id === g.id)
+  const items = participants.map(p => {
+    const pTokens = tokens.filter(t => t.participant_id === p.id)
     let txCount = 0
     let lastActivity: string | null = null
     for (const t of transactions) {
-      const involved = t.paid_by === g.name || (t.participants ?? []).includes(g.name)
+      const involved = t.paid_by === p.name || (t.participants ?? []).includes(p.name)
       if (!involved) continue
       txCount++
       const candidate = t.last_edited_at ?? t.date
@@ -51,8 +52,10 @@ export async function GET() {
       }
     }
     return {
-      ...g,
-      tokens: guestTokens,
+      ...p,
+      is_admin: Boolean(p.is_admin) || p.name === "Antônio",
+      permissions: p.permissions ? parsePermissions(p.permissions) : { ...DEFAULT_PERMISSIONS },
+      tokens: pTokens,
       transactionCount: txCount,
       lastActivity,
     }
@@ -61,7 +64,7 @@ export async function GET() {
   return NextResponse.json({ items })
 }
 
-// PATCH → update guest fields, or revoke a token
+// PATCH → update participant fields (name, color, is_admin, permissions, is_archived), or revoke a token
 export async function PATCH(req: NextRequest) {
   const body = await req.json()
   const supabase = getSupabaseClient()
@@ -78,9 +81,9 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  // Update a guest
-  const guestId = String(body?.guestId ?? "").trim()
-  if (!guestId) return NextResponse.json({ error: "guestId obrigatório" }, { status: 400 })
+  // Update a participant
+  const participantId = String(body?.guestId ?? body?.participantId ?? "").trim()
+  if (!participantId) return NextResponse.json({ error: "participantId obrigatório" }, { status: 400 })
 
   const updates: Record<string, unknown> = {}
   if (typeof body?.name === "string") {
@@ -95,6 +98,12 @@ export async function PATCH(req: NextRequest) {
   if (typeof body?.is_archived === "boolean") {
     updates.is_archived = body.is_archived
   }
+  if (typeof body?.is_admin === "boolean") {
+    updates.is_admin = body.is_admin
+  }
+  if (body?.permissions && typeof body.permissions === "object") {
+    updates.permissions = parsePermissions(body.permissions)
+  }
 
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: "Nada a atualizar" }, { status: 400 })
@@ -105,7 +114,7 @@ export async function PATCH(req: NextRequest) {
     const { data: current, error: cErr } = await supabase
       .from("participants")
       .select("name")
-      .eq("id", guestId)
+      .eq("id", participantId)
       .maybeSingle()
     if (cErr) return NextResponse.json({ error: cErr.message }, { status: 500 })
     if (current && current.name !== updates.name) {
@@ -117,7 +126,7 @@ export async function PATCH(req: NextRequest) {
         .from("participants")
         .select("id")
         .ilike("name", newName)
-        .neq("id", guestId)
+        .neq("id", participantId)
       if (dupeError) return NextResponse.json({ error: dupeError.message }, { status: 500 })
       if (dupes && dupes.length > 0) {
         return NextResponse.json({ error: "Já existe um participante com esse nome" }, { status: 409 })
@@ -146,34 +155,34 @@ export async function PATCH(req: NextRequest) {
   const { data, error } = await supabase
     .from("participants")
     .update(updates)
-    .eq("id", guestId)
+    .eq("id", participantId)
     .select("*")
     .single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ guest: data })
+  return NextResponse.json({ participant: data, guest: data })
 }
 
-// POST → generate a new personal magic-link token for a guest
+// POST → generate a new personal magic-link token for a participant
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const guestId = String(body?.guestId ?? "").trim()
-  if (!guestId) return NextResponse.json({ error: "guestId obrigatório" }, { status: 400 })
+  const participantId = String(body?.guestId ?? body?.participantId ?? "").trim()
+  if (!participantId) return NextResponse.json({ error: "participantId obrigatório" }, { status: 400 })
 
   const supabase = getSupabaseClient()
 
-  // Verify the guest exists
-  const { data: guest, error: gErr } = await supabase
+  // Verify the participant exists
+  const { data: participant, error: gErr } = await supabase
     .from("participants")
     .select("id,kind")
-    .eq("id", guestId)
+    .eq("id", participantId)
     .maybeSingle()
   if (gErr) return NextResponse.json({ error: gErr.message }, { status: 500 })
-  if (!guest) return NextResponse.json({ error: "Guest não encontrado" }, { status: 404 })
+  if (!participant) return NextResponse.json({ error: "Participante não encontrado" }, { status: 404 })
 
   const token = genToken()
   const { error } = await supabase
     .from("participant_tokens")
-    .insert({ token, participant_id: guestId, kind: "personal" })
+    .insert({ token, participant_id: participantId, kind: "personal" })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   return NextResponse.json({ token })

@@ -19,13 +19,13 @@ export const USERS: UserConfig[] = [
   { name: "Pietro", pin: "1234", hex: "#FB923C", hsl: "hsl(28, 100%, 62%)" },
 ]
 
-/** Members that can manage monthly income. */
+/** Members that can manage monthly income (fallback list). Prefer dynamic permissions. */
 export const INCOME_USERS = ["Antônio", "Júlia"]
 
-/** Admins (audit log, categories management, invite link, participants). */
-export const ADMIN_USERS = ["Antônio", "Júlia", "Pietro"] as const
+/** Admins fallback list. The primary source of truth is `is_admin` in `participants`. */
+export const ADMIN_USERS = ["Antônio"] as const
 
-/** Convenience: is the given user name an admin? */
+/** Convenience fallback: is the given user name an admin? */
 export const isAdminUser = (name: string | null | undefined): boolean =>
   !!name && (ADMIN_USERS as readonly string[]).includes(name)
 

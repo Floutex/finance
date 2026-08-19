@@ -4,21 +4,22 @@ import * as React from "react"
 import { useRouter } from "next/navigation"
 
 import { useSessionUser } from "@/hooks/use-session-user"
-import { INCOME_USERS } from "@/lib/constants"
+import { useUserPermissions } from "@/hooks/use-user-permissions"
 import { IncomeManager } from "@/components/v2/income/income-manager"
 
 export default function IncomePage() {
   const user = useSessionUser()
+  const { permissions, loading } = useUserPermissions(user)
   const router = useRouter()
 
   React.useEffect(() => {
-    if (user !== null && !INCOME_USERS.includes(user)) {
+    if (!loading && user !== null && !permissions.can_manage_income) {
       router.replace("/dashboard")
     }
-  }, [user, router])
+  }, [user, permissions.can_manage_income, loading, router])
 
-  if (user === null) return null
-  if (!INCOME_USERS.includes(user)) return null
+  if (loading || user === null) return null
+  if (!permissions.can_manage_income) return null
 
   return <IncomeManager />
 }

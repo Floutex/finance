@@ -22,6 +22,7 @@ import {
 } from "@/components/v2/transactions/bulk-edit-dialogs"
 import { Fab } from "@/components/v2/layout/fab"
 import { useGuestContext } from "@/components/v2/guest/guest-context"
+import { getEffectivePermissions } from "@/lib/permissions"
 import type { Tables } from "@/lib/database.types"
 
 const ReceiptAnalyzeSheet = dynamic(
@@ -44,6 +45,7 @@ export default function GuestTransactionsPage() {
   const { state, refresh, updateTransactions } = useGuestContext()
   const { participant, members, participants, transactions, monthlyIncomes } = state
   const user = participant.name
+  const permissions = React.useMemo(() => getEffectivePermissions(participant), [participant])
 
   const memberNames = React.useMemo(() => members.map((mm) => mm.name), [members])
   const { toolbar, setToolbar, fullDateRange, metrics } = useDashboardData({
@@ -61,7 +63,8 @@ export default function GuestTransactionsPage() {
 
   const mut = useDashboardMutations({
     currentUser: user,
-    isAdmin: false,
+    isAdmin: permissions.isAdmin,
+    canDeleteOthers: permissions.can_delete_others_tx,
     filteredTransactions: metrics?.filteredTransactions,
     selectedIds,
     updateCache: updateTransactions,
@@ -122,12 +125,12 @@ export default function GuestTransactionsPage() {
     (t: Transaction) => (
       <TransactionRowActions
         transaction={t}
-        canDelete={t.paid_by === user}
+        canDelete={permissions.isAdmin || permissions.can_delete_others_tx || t.paid_by === user}
         onEdit={(transaction) => mut.setSheetMode({ kind: "edit", transaction })}
         onDelete={(transaction) => mut.setPendingDelete(transaction)}
       />
     ),
-    [user, mut]
+    [user, mut, permissions]
   )
 
   if (!metrics) return null
@@ -201,7 +204,8 @@ export default function GuestTransactionsPage() {
             : "create"
         }
         currentUser={user}
-        canEditPayer={false}
+        canEditPayer={permissions.can_change_payer}
+        allowCreateCategory={permissions.can_manage_categories}
         createDefaults={{
           paid_by: user,
           participants: defaultParticipants,
@@ -254,7 +258,8 @@ export default function GuestTransactionsPage() {
         open={mut.receiptOpen}
         onOpenChange={mut.setReceiptOpen}
         currentUser={user}
-        canEditPayer={false}
+        canEditPayer={permissions.can_change_payer}
+        allowCreateCategory={permissions.can_manage_categories}
         onSaved={mut.handleReceiptSaved}
         payerOptions={payerOptions}
       />
@@ -263,7 +268,7 @@ export default function GuestTransactionsPage() {
         currentUser={user}
         defaultParticipants={defaultParticipants}
         onCreateMany={mut.handleCreateMany}
-        payerNames={[user]}
+        payerNames={permissions.can_change_payer ? undefined : [user]}
       />
 
       <Fab onClick={() => mut.setSheetMode("create")} aria-label="Nova transação" />

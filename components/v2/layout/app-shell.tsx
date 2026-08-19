@@ -17,19 +17,8 @@ import { OfflineBanner } from "@/components/v2/layout/offline-banner"
 import { ShortcutsCheatsheet } from "@/components/v2/layout/shortcuts-cheatsheet"
 import { UserMenu } from "@/components/v2/layout/user-menu"
 import type { NavItem } from "@/components/v2/layout/nav-section"
-import { SESSION_USER_KEY, USERS, isAdminUser } from "@/lib/constants"
-
-const PRIMARY_NAV: NavItem[] = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, exact: true },
-  { label: "Transações", href: "/dashboard/transactions", icon: Receipt },
-  { label: "Ganho mensal", href: "/dashboard/income", icon: Wallet },
-]
-
-const ADMIN_NAV: NavItem[] = [
-  { label: "Categorias", href: "/admin/categories", icon: Tag },
-  { label: "Participantes", href: "/admin/participants", icon: Users },
-  { label: "Audit", href: "/admin/audit", icon: ScrollText },
-]
+import { SESSION_USER_KEY, USERS } from "@/lib/constants"
+import { useUserPermissions } from "@/hooks/use-user-permissions"
 
 /**
  * Authenticated app shell — sidebar + content area. Reads the session user from
@@ -56,6 +45,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
   }, [router])
 
+  const { permissions } = useUserPermissions(user)
+
   if (!checked || !user) {
     return (
       <div className="grid min-h-screen place-items-center bg-background">
@@ -66,10 +57,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     )
   }
 
-  const isAdmin = isAdminUser(user)
-  const secondaryNav: SidebarSecondaryNav | null = isAdmin
-    ? { label: "Admin", items: ADMIN_NAV }
-    : null
+  const primaryNav: NavItem[] = [
+    { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, exact: true },
+    { label: "Transações", href: "/dashboard/transactions", icon: Receipt },
+    ...(permissions.can_manage_income
+      ? [{ label: "Ganho mensal", href: "/dashboard/income", icon: Wallet }]
+      : []),
+  ]
+
+  const adminItems: NavItem[] = []
+  if (permissions.can_manage_categories) {
+    adminItems.push({ label: "Categorias", href: "/admin/categories", icon: Tag })
+  }
+  if (permissions.can_manage_invites || permissions.isAdmin) {
+    adminItems.push({ label: "Participantes", href: "/admin/participants", icon: Users })
+  }
+  if (permissions.can_view_audit) {
+    adminItems.push({ label: "Audit", href: "/admin/audit", icon: ScrollText })
+  }
+
+  const secondaryNav: SidebarSecondaryNav | null =
+    adminItems.length > 0
+      ? { label: "Admin", items: adminItems }
+      : null
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -80,14 +90,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         Pular para o conteúdo
       </a>
       <Sidebar
-        primaryNav={PRIMARY_NAV}
+        primaryNav={primaryNav}
         secondaryNav={secondaryNav}
         footer={(collapsed) => <UserMenu user={user} collapsed={collapsed} />}
       />
       <div className="flex min-w-0 flex-1 flex-col">
         <OfflineBanner />
         <MobileTopbar
-          primaryNav={PRIMARY_NAV}
+          primaryNav={primaryNav}
           secondaryNav={secondaryNav}
           drawerFooter={<UserMenu user={user} />}
           rightSlot={<UserMenu user={user} collapsed />}

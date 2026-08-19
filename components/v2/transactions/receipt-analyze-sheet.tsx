@@ -49,8 +49,10 @@ type ReceiptAnalyzeSheetProps = {
   onSaved: (transactions: Transaction[]) => void
   /** Override "Pago por" dropdown options (defaults to members). */
   payerOptions?: { id: string; name: string }[]
-  /** Only admins may choose the payer; others are locked to themselves. */
+  /** Whether the user may choose who paid. */
   canEditPayer?: boolean
+  /** Whether the user may create new categories ad-hoc in the combobox. */
+  allowCreateCategory?: boolean
 }
 
 /**
@@ -68,6 +70,7 @@ export function ReceiptAnalyzeSheet({
   onSaved,
   payerOptions,
   canEditPayer = true,
+  allowCreateCategory = true,
 }: ReceiptAnalyzeSheetProps) {
   const { active: participants, members } = useParticipants()
   const { categories } = useCategories()
@@ -377,6 +380,7 @@ export function ReceiptAnalyzeSheet({
                               value={t.category}
                               onChange={(v) => updateExtracted(i, "category", v)}
                               categories={categories}
+                              allowCreate={allowCreateCategory}
                             />
                           </div>
                         </div>

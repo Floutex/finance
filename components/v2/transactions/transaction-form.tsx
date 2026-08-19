@@ -123,11 +123,11 @@ type TransactionFormProps = {
    */
   payerOptions?: { id: string; name: string }[]
   /**
-   * Whether the user may choose who paid. Only admins can. Non-admins (and
-   * guests) get the field locked to whoever it's already set to (themselves on
-   * create), so they can only register transactions they paid for.
+   * Whether the user may choose who paid.
    */
   canEditPayer?: boolean
+  /** Whether the user may create new categories ad-hoc in the combobox. */
+  allowCreateCategory?: boolean
   className?: string
 }
 
@@ -141,6 +141,7 @@ export function TransactionForm({
   compact = false,
   payerOptions,
   canEditPayer = true,
+  allowCreateCategory = true,
   className,
 }: TransactionFormProps) {
   const { categories } = useCategories()
@@ -342,7 +343,7 @@ export function TransactionForm({
                 <span className="truncate">{formPaidBy || currentUser}</span>
               </div>
               <p className="text-[11px] leading-tight text-muted-foreground">
-                Só administradores podem registrar em nome de outra pessoa.
+                Sem permissão para registrar em nome de outra pessoa.
               </p>
             </>
           )}
@@ -364,6 +365,7 @@ export function TransactionForm({
                 value={field.value}
                 onChange={field.onChange}
                 categories={categories}
+                allowCreate={allowCreateCategory}
               />
             )}
           />

@@ -12,6 +12,10 @@ import {
   Loader2,
   Pencil,
   Plus,
+  Search,
+  Shield,
+  ShieldCheck,
+  UserCheck,
 } from "lucide-react"
 import { format, parseISO } from "date-fns"
 import { ptBR } from "date-fns/locale"
@@ -40,6 +44,11 @@ import { useMonthlyIncomes } from "@/hooks/use-monthly-incomes"
 import { simplifyDebts } from "@/lib/debt-simplification"
 import { buildIncomeMap } from "@/lib/proportional-split"
 import { PENDING_MARKER } from "@/lib/constants"
+import {
+  PERMISSION_METADATA,
+  type ParticipantPermissions,
+  DEFAULT_PERMISSIONS,
+} from "@/lib/permissions"
 
 const BRL = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -55,11 +64,13 @@ type GuestToken = {
   revoked_at: string | null
 }
 
-type Guest = {
+type ParticipantItem = {
   id: string
   name: string
   color: string
-  kind: string
+  kind: "member" | "guest" | string
+  is_admin: boolean
+  permissions: ParticipantPermissions
   is_archived: boolean
   created_at: string
   tokens: GuestToken[]
@@ -75,11 +86,13 @@ const COLOR_PALETTE = [
 ]
 
 export function ParticipantsManager() {
-  const [items, setItems] = React.useState<Guest[]>([])
+  const [items, setItems] = React.useState<ParticipantItem[]>([])
   const [loading, setLoading] = React.useState(true)
   const [showArchived, setShowArchived] = React.useState(false)
+  const [kindFilter, setKindFilter] = React.useState<"all" | "member" | "guest">("all")
+  const [searchQuery, setSearchQuery] = React.useState("")
   const [expandedId, setExpandedId] = React.useState<string | null>(null)
-  const [editGuest, setEditGuest] = React.useState<Guest | null>(null)
+  const [editItem, setEditItem] = React.useState<ParticipantItem | null>(null)
   const [pendingId, setPendingId] = React.useState<string | null>(null)
   const [copiedToken, setCopiedToken] = React.useState<string | null>(null)
   const [origin, setOrigin] = React.useState("")
@@ -87,8 +100,6 @@ export function ParticipantsManager() {
   const { transactions } = useTransactions()
   const { incomes } = useMonthlyIncomes()
 
-  // Net balance per name, derived from the same engine as the dashboard so
-  // the numbers stay consistent. positive => receivable; negative => payable.
   const balanceByName = React.useMemo(() => {
     const map = new Map<string, number>()
     if (transactions.length === 0) return map
@@ -132,21 +143,31 @@ export function ParticipantsManager() {
     load()
   }, [load])
 
-  const visible = showArchived ? items : items.filter((g) => !g.is_archived)
+  const visible = React.useMemo(() => {
+    return items.filter((p) => {
+      if (!showArchived && p.is_archived) return false
+      if (kindFilter !== "all" && p.kind !== kindFilter) return false
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim()
+        return p.name.toLowerCase().includes(q)
+      }
+      return true
+    })
+  }, [items, showArchived, kindFilter, searchQuery])
 
-  const toggleArchive = async (g: Guest) => {
-    setPendingId(g.id)
+  const toggleArchive = async (p: ParticipantItem) => {
+    setPendingId(p.id)
     try {
       const res = await fetch("/api/admin/guests", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ guestId: g.id, is_archived: !g.is_archived }),
+        body: JSON.stringify({ participantId: p.id, is_archived: !p.is_archived }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? "Falha")
       await reloadParticipants()
       await load()
-      toast.success(g.is_archived ? "Desarquivado." : "Arquivado.")
+      toast.success(p.is_archived ? "Desarquivado." : "Arquivado.")
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Falha.")
     } finally {
@@ -154,13 +175,13 @@ export function ParticipantsManager() {
     }
   }
 
-  const generateToken = async (g: Guest) => {
-    setPendingId(g.id)
+  const generateToken = async (p: ParticipantItem) => {
+    setPendingId(p.id)
     try {
       const res = await fetch("/api/admin/guests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ guestId: g.id }),
+        body: JSON.stringify({ participantId: p.id }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? "Falha")
@@ -206,12 +227,10 @@ export function ParticipantsManager() {
             Admin
           </p>
           <h1 className="font-display text-3xl font-semibold tracking-tight">
-            Participantes e convites
+            Participantes e permissões
           </h1>
           <p className="text-sm text-muted-foreground">
-            Mande o link de convite para novos guests se cadastrarem. Cada
-            participante existente tem seus próprios magic-links pessoais
-            geríveis abaixo.
+            Gerencie administradores, membros, convidados e permissões granulares de acesso.
           </p>
         </div>
         <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
@@ -226,6 +245,57 @@ export function ParticipantsManager() {
       <InviteGenerator />
 
       <div className="surface-1 overflow-hidden rounded-lg">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-3">
+          <div className="flex items-center gap-1 rounded-md bg-muted/40 p-1 text-xs">
+            <button
+              type="button"
+              onClick={() => setKindFilter("all")}
+              className={cn(
+                "rounded px-2.5 py-1 font-medium transition-colors",
+                kindFilter === "all"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Todos ({items.filter((i) => showArchived || !i.is_archived).length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setKindFilter("member")}
+              className={cn(
+                "rounded px-2.5 py-1 font-medium transition-colors",
+                kindFilter === "member"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Membros ({items.filter((i) => i.kind === "member" && (showArchived || !i.is_archived)).length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setKindFilter("guest")}
+              className={cn(
+                "rounded px-2.5 py-1 font-medium transition-colors",
+                kindFilter === "guest"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Convidados ({items.filter((i) => i.kind === "guest" && (showArchived || !i.is_archived)).length})
+            </button>
+          </div>
+
+          <div className="relative w-full max-w-xs sm:w-auto">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por nome…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-8 pl-8 text-xs"
+            />
+          </div>
+        </div>
+
         {loading ? (
           <ul className="divide-y divide-border">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -236,21 +306,23 @@ export function ParticipantsManager() {
           </ul>
         ) : visible.length === 0 ? (
           <div className="px-6 py-12 text-center text-sm text-muted-foreground">
-            Nenhum convidado.
+            Nenhum participante encontrado.
           </div>
         ) : (
           <ul className="divide-y divide-border">
-            {visible.map((g) => {
-              const expanded = expandedId === g.id
-              const busy = pendingId === g.id
-              const activeTokens = g.tokens.filter((t) => !t.revoked_at)
+            {visible.map((p) => {
+              const expanded = expandedId === p.id
+              const busy = pendingId === p.id
+              const activeTokens = p.tokens.filter((t) => !t.revoked_at)
+              const grantedPermsCount = Object.values(p.permissions || {}).filter(Boolean).length
+
               return (
-                <li key={g.id} className="px-4 py-3">
+                <li key={p.id} className="px-4 py-3">
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
-                      onClick={() => setExpandedId(expanded ? null : g.id)}
-                      className="text-muted-foreground"
+                      onClick={() => setExpandedId(expanded ? null : p.id)}
+                      className="text-muted-foreground hover:text-foreground"
                       aria-label={expanded ? "Recolher" : "Expandir"}
                     >
                       {expanded ? (
@@ -259,19 +331,43 @@ export function ParticipantsManager() {
                         <ChevronRight className="size-4" />
                       )}
                     </button>
-                    <ParticipantAvatar name={g.name} hex={g.color} size="sm" />
+                    <ParticipantAvatar name={p.name} hex={p.color} size="sm" />
                     <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-x-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <p
                           className={cn(
                             "truncate text-sm font-medium",
-                            g.is_archived && "text-muted-foreground line-through"
+                            p.is_archived && "text-muted-foreground line-through"
                           )}
                         >
-                          {g.name}
+                          {p.name}
                         </p>
+                        {p.is_admin ? (
+                          <Badge
+                            variant="secondary"
+                            className="gap-1 border-primary/30 bg-primary/15 text-[10px] font-semibold text-primary"
+                          >
+                            <ShieldCheck className="size-3" />
+                            Admin
+                          </Badge>
+                        ) : p.kind === "member" ? (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] text-muted-foreground"
+                          >
+                            Membro
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] text-muted-foreground"
+                          >
+                            Convidado
+                          </Badge>
+                        )}
+
                         {(() => {
-                          const b = balanceByName.get(g.name) ?? 0
+                          const b = balanceByName.get(p.name) ?? 0
                           if (Math.abs(b) < 0.005) return null
                           return (
                             <span
@@ -286,38 +382,52 @@ export function ParticipantsManager() {
                           )
                         })()}
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        {g.transactionCount}{" "}
-                        {g.transactionCount === 1 ? "transação" : "transações"}
-                        {g.lastActivity && (
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                        <span>
+                          {p.transactionCount}{" "}
+                          {p.transactionCount === 1 ? "transação" : "transações"}
+                        </span>
+                        {p.lastActivity && (
                           <>
-                            {" · ativo "}
-                            {format(parseISO(g.lastActivity), "dd MMM yyyy", {
-                              locale: ptBR,
-                            })}
+                            <span>·</span>
+                            <span>
+                              ativo{" "}
+                              {format(parseISO(p.lastActivity), "dd MMM yyyy", {
+                                locale: ptBR,
+                              })}
+                            </span>
+                          </>
+                        )}
+                        {!p.is_admin && grantedPermsCount > 0 && (
+                          <>
+                            <span>·</span>
+                            <span className="text-foreground/80">
+                              {grantedPermsCount}{" "}
+                              {grantedPermsCount === 1 ? "permissão extra" : "permissões extras"}
+                            </span>
                           </>
                         )}
                         {activeTokens.length > 0 && (
                           <>
-                            {" · "}
+                            <span>·</span>
                             <Badge
                               variant="outline"
-                              className="ml-1 text-[10px] uppercase tracking-wider"
+                              className="text-[10px] uppercase tracking-wider"
                             >
                               {activeTokens.length} link
                               {activeTokens.length > 1 ? "s" : ""}
                             </Badge>
                           </>
                         )}
-                      </p>
+                      </div>
                     </div>
                     <div className="flex items-center gap-1">
                       <Button
                         size="icon"
                         variant="ghost"
                         className="size-8"
-                        aria-label="Editar"
-                        onClick={() => setEditGuest(g)}
+                        aria-label="Editar participante e permissões"
+                        onClick={() => setEditItem(p)}
                       >
                         <Pencil className="size-3.5" />
                       </Button>
@@ -325,13 +435,13 @@ export function ParticipantsManager() {
                         size="icon"
                         variant="ghost"
                         className="size-8"
-                        aria-label={g.is_archived ? "Desarquivar" : "Arquivar"}
-                        disabled={busy}
-                        onClick={() => toggleArchive(g)}
+                        aria-label={p.is_archived ? "Desarquivar" : "Arquivar"}
+                        disabled={busy || p.is_admin}
+                        onClick={() => toggleArchive(p)}
                       >
                         {busy ? (
                           <Loader2 className="size-3.5 animate-spin" />
-                        ) : g.is_archived ? (
+                        ) : p.is_archived ? (
                           <ArchiveRestore className="size-3.5" />
                         ) : (
                           <Archive className="size-3.5" />
@@ -345,7 +455,7 @@ export function ParticipantsManager() {
                       <div className="grid grid-cols-2 gap-3 rounded-md border border-border bg-background/40 p-3 text-xs sm:grid-cols-4">
                         <div>
                           {(() => {
-                            const b = balanceByName.get(g.name) ?? 0
+                            const b = balanceByName.get(p.name) ?? 0
                             const zero = Math.abs(b) < 0.005
                             return (
                               <>
@@ -376,13 +486,13 @@ export function ParticipantsManager() {
                           })()}
                         </div>
                         <div>
-                          <p className="font-medium">{g.transactionCount}</p>
+                          <p className="font-medium">{p.transactionCount}</p>
                           <p className="text-muted-foreground">transações</p>
                         </div>
                         <div>
                           <p className="font-medium">
-                            {g.lastActivity
-                              ? format(parseISO(g.lastActivity), "dd MMM yyyy", {
+                            {p.lastActivity
+                              ? format(parseISO(p.lastActivity), "dd MMM yyyy", {
                                   locale: ptBR,
                                 })
                               : "—"}
@@ -391,12 +501,44 @@ export function ParticipantsManager() {
                         </div>
                         <div>
                           <p className="font-medium">
-                            {format(parseISO(g.created_at), "dd MMM yyyy", {
+                            {format(parseISO(p.created_at), "dd MMM yyyy", {
                               locale: ptBR,
                             })}
                           </p>
                           <p className="text-muted-foreground">criado em</p>
                         </div>
+                      </div>
+
+                      {/* Permissions Summary in expanded card */}
+                      <div className="rounded-md border border-border bg-background/40 p-3 text-xs">
+                        <p className="mb-2 font-medium text-muted-foreground">
+                          Permissões ativas:
+                        </p>
+                        {p.is_admin ? (
+                          <p className="text-primary">
+                            Administrador com acesso total irrestrito a todas as funcionalidades.
+                          </p>
+                        ) : grantedPermsCount === 0 ? (
+                          <p className="text-muted-foreground italic">
+                            Nenhuma permissão especial concedida (modo restrito padrão).
+                          </p>
+                        ) : (
+                          <div className="flex flex-wrap gap-1.5">
+                            {PERMISSION_METADATA.map((meta) => {
+                              const enabled = p.permissions?.[meta.key]
+                              if (!enabled) return null
+                              return (
+                                <Badge
+                                  key={meta.key}
+                                  variant="secondary"
+                                  className="text-[11px]"
+                                >
+                                  {meta.label}
+                                </Badge>
+                              )
+                            })}
+                          </div>
+                        )}
                       </div>
 
                       <div>
@@ -407,20 +549,20 @@ export function ParticipantsManager() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => generateToken(g)}
+                            onClick={() => generateToken(p)}
                             disabled={busy}
                           >
                             <Plus className="size-3.5" />
                             Novo link
                           </Button>
                         </div>
-                        {g.tokens.length === 0 ? (
+                        {p.tokens.length === 0 ? (
                           <p className="py-2 text-center text-xs italic text-muted-foreground">
                             Nenhum token gerado.
                           </p>
                         ) : (
                           <ul className="flex flex-col gap-1.5">
-                            {g.tokens.map((t) => {
+                            {p.tokens.map((t) => {
                               const url = `${origin}/g/${t.token}`
                               const revoked = !!t.revoked_at
                               const isCopied = copiedToken === t.token
@@ -488,10 +630,10 @@ export function ParticipantsManager() {
       </div>
 
       <EditParticipantDialog
-        guest={editGuest}
-        onClose={() => setEditGuest(null)}
+        item={editItem}
+        onClose={() => setEditItem(null)}
         onSaved={async () => {
-          setEditGuest(null)
+          setEditItem(null)
           await reloadParticipants()
           await load()
         }}
@@ -501,25 +643,36 @@ export function ParticipantsManager() {
 }
 
 type EditDialogProps = {
-  guest: Guest | null
+  item: ParticipantItem | null
   onClose: () => void
   onSaved: () => Promise<void>
 }
 
-function EditParticipantDialog({ guest, onClose, onSaved }: EditDialogProps) {
+function EditParticipantDialog({ item, onClose, onSaved }: EditDialogProps) {
   const [name, setName] = React.useState("")
   const [color, setColor] = React.useState("")
+  const [isAdmin, setIsAdmin] = React.useState(false)
+  const [permissions, setPermissions] = React.useState<ParticipantPermissions>(DEFAULT_PERMISSIONS)
   const [pending, setPending] = React.useState(false)
 
   React.useEffect(() => {
-    if (guest) {
-      setName(guest.name)
-      setColor(guest.color)
+    if (item) {
+      setName(item.name)
+      setColor(item.color)
+      setIsAdmin(item.is_admin)
+      setPermissions(item.permissions || { ...DEFAULT_PERMISSIONS })
     }
-  }, [guest])
+  }, [item])
+
+  const togglePermission = (key: keyof ParticipantPermissions) => {
+    setPermissions((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }))
+  }
 
   const submit = async () => {
-    if (!guest) return
+    if (!item) return
     if (!name.trim()) {
       toast.error("Nome obrigatório.")
       return
@@ -533,11 +686,17 @@ function EditParticipantDialog({ guest, onClose, onSaved }: EditDialogProps) {
       const res = await fetch("/api/admin/guests", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ guestId: guest.id, name: name.trim(), color }),
+        body: JSON.stringify({
+          participantId: item.id,
+          name: name.trim(),
+          color,
+          is_admin: isAdmin,
+          permissions,
+        }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? "Falha")
-      toast.success("Participante atualizado.")
+      toast.success("Participante e permissões atualizados.")
       await onSaved()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Falha.")
@@ -548,66 +707,150 @@ function EditParticipantDialog({ guest, onClose, onSaved }: EditDialogProps) {
 
   return (
     <Dialog
-      open={guest !== null}
+      open={item !== null}
       onOpenChange={(o) => {
         if (!o && !pending) onClose()
       }}
     >
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Editar participante</DialogTitle>
+          <DialogTitle>Editar participante e permissões</DialogTitle>
           <DialogDescription>
-            Renomear propaga em todas as transações. Cor afeta badges e charts.
+            Configure nome, cor e permissões granulares de acesso à plataforma.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="p-name">Nome</Label>
-            <Input
-              id="p-name"
-              autoFocus
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={40}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="p-color">Cor</Label>
-            <div className="flex items-center gap-2">
-              <input
-                type="color"
-                value={color}
-                onChange={(e) => setColor(e.target.value)}
-                className="size-9 cursor-pointer rounded-md border border-border bg-transparent"
-              />
+        <div className="space-y-5">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="p-name">Nome</Label>
               <Input
-                id="p-color"
-                value={color}
-                onChange={(e) => setColor(e.target.value)}
-                className="max-w-[120px] font-mono text-xs"
-                placeholder="#RRGGBB"
+                id="p-name"
+                autoFocus
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={40}
               />
             </div>
-            <div className="flex flex-wrap gap-1.5 pt-1">
-              {COLOR_PALETTE.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setColor(c)}
-                  className={cn(
-                    "size-6 rounded-full border-2 transition-all",
-                    color.toLowerCase() === c.toLowerCase()
-                      ? "border-foreground scale-110"
-                      : "border-transparent hover:scale-110"
-                  )}
-                  style={{ backgroundColor: c }}
-                  aria-label={c}
+            <div className="space-y-1.5">
+              <Label htmlFor="p-color">Cor</Label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  value={color}
+                  onChange={(e) => setColor(e.target.value)}
+                  className="size-9 cursor-pointer rounded-md border border-border bg-transparent"
                 />
-              ))}
+                <Input
+                  id="p-color"
+                  value={color}
+                  onChange={(e) => setColor(e.target.value)}
+                  className="max-w-[120px] font-mono text-xs"
+                  placeholder="#RRGGBB"
+                />
+              </div>
             </div>
+          </div>
+
+          <div className="flex flex-wrap gap-1.5">
+            {COLOR_PALETTE.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setColor(c)}
+                className={cn(
+                  "size-6 rounded-full border-2 transition-all",
+                  color.toLowerCase() === c.toLowerCase()
+                    ? "border-foreground scale-110"
+                    : "border-transparent hover:scale-110"
+                )}
+                style={{ backgroundColor: c }}
+                aria-label={c}
+              />
+            ))}
+          </div>
+
+          <div className="space-y-3 border-t border-border pt-4">
+            {/* Admin toggle card */}
+            <div
+              onClick={() => setIsAdmin(!isAdmin)}
+              className={cn(
+                "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors",
+                isAdmin
+                  ? "border-primary bg-primary/10"
+                  : "border-border bg-background/50 hover:bg-accent/40"
+              )}
+            >
+              <Checkbox
+                checked={isAdmin}
+                onCheckedChange={(v) => setIsAdmin(Boolean(v))}
+                className="mt-0.5"
+                aria-label="Administrador"
+              />
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold">Administrador</span>
+                  {isAdmin && (
+                    <Badge variant="secondary" className="text-[10px] text-primary">
+                      Acesso total
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Acesso irrestrito a todas as configurações, painéis, categorias e gerenciamento de participantes.
+                </p>
+              </div>
+            </div>
+
+            {/* Granular Permissions */}
+            {!isAdmin ? (
+              <div className="space-y-2 pt-2">
+                <Label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Permissões Granulares
+                </Label>
+                <div className="space-y-1.5">
+                  {PERMISSION_METADATA.map((meta) => {
+                    const isChecked = Boolean(permissions[meta.key])
+                    return (
+                      <div
+                        key={meta.key}
+                        onClick={() => togglePermission(meta.key)}
+                        className={cn(
+                          "flex cursor-pointer items-start gap-3 rounded-md border p-2.5 text-xs transition-colors",
+                          isChecked
+                            ? "border-primary/40 bg-primary/5"
+                            : "border-border bg-background/30 hover:bg-accent/30"
+                        )}
+                      >
+                        <Checkbox
+                          checked={isChecked}
+                          onCheckedChange={() => togglePermission(meta.key)}
+                          className="mt-0.5"
+                          aria-label={meta.label}
+                        />
+                        <div className="space-y-0.5">
+                          <p className="font-medium text-foreground">{meta.label}</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {meta.description}
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-md border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
+                <p className="font-medium text-foreground">
+                  Todas as permissões ativadas por padrão
+                </p>
+                <p className="mt-1">
+                  Administradores possuem permissão automática para mudar quem pagou, gerenciar categorias, gerar convites, excluir despesas e editar rendas.
+                </p>
+              </div>
+            )}
           </div>
         </div>
-        <DialogFooter>
+        <DialogFooter className="pt-2">
           <Button variant="ghost" onClick={onClose} disabled={pending}>
             Cancelar
           </Button>

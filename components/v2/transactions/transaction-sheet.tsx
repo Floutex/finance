@@ -31,8 +31,10 @@ type TransactionSheetProps = {
   onSubmit: (values: TransactionFormSubmit) => Promise<void>
   /** Override "Pago por" options (defaults to members in the form). */
   payerOptions?: { id: string; name: string }[]
-  /** Only admins may choose the payer; others are locked to themselves. */
+  /** Whether the user may change who paid. */
   canEditPayer?: boolean
+  /** Whether the user may create new categories ad-hoc in the combobox. */
+  allowCreateCategory?: boolean
 }
 
 export function TransactionSheet({
@@ -44,6 +46,7 @@ export function TransactionSheet({
   onSubmit,
   payerOptions,
   canEditPayer = true,
+  allowCreateCategory = true,
 }: TransactionSheetProps) {
   const initial = React.useMemo<TransactionFormValues>(() => {
     if (mode === "create") {
@@ -92,6 +95,7 @@ export function TransactionSheet({
             existingReceiptUrl={existingReceiptUrl}
             payerOptions={payerOptions}
             canEditPayer={canEditPayer}
+            allowCreateCategory={allowCreateCategory}
             onCancel={() => onOpenChange(false)}
             onSubmit={async (values) => {
               await onSubmit(values)

@@ -102,25 +102,31 @@ export type Database = {
           color: string
           created_at: string
           id: string
+          is_admin: boolean
           is_archived: boolean
           kind: string
           name: string
+          permissions: Json
         }
         Insert: {
           color: string
           created_at?: string
           id?: string
+          is_admin?: boolean
           is_archived?: boolean
           kind: string
           name: string
+          permissions?: Json
         }
         Update: {
           color?: string
           created_at?: string
           id?: string
+          is_admin?: boolean
           is_archived?: boolean
           kind?: string
           name?: string
+          permissions?: Json
         }
         Relationships: []
       }

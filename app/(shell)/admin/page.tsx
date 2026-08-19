@@ -1,30 +1,57 @@
+"use client"
+
+import * as React from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Tag, Users, ScrollText, ArrowRight } from "lucide-react"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/v2/primitives/card"
-
-const SECTIONS = [
-  {
-    href: "/admin/categories",
-    label: "Categorias",
-    description: "Criar, renomear e remover categorias de gasto.",
-    icon: Tag,
-  },
-  {
-    href: "/admin/participants",
-    label: "Participantes e convites",
-    description: "Membros, convidados, cores, tokens de acesso e link de convite global.",
-    icon: Users,
-  },
-  {
-    href: "/admin/audit",
-    label: "Audit log",
-    description: "Histórico de ações na plataforma (filtros por ator, ação, data).",
-    icon: ScrollText,
-  },
-] as const
+import { useSessionUser } from "@/hooks/use-session-user"
+import { useUserPermissions } from "@/hooks/use-user-permissions"
 
 export default function AdminOverviewPage() {
+  const user = useSessionUser()
+  const { permissions, loading } = useUserPermissions(user)
+  const router = useRouter()
+
+  const sections = React.useMemo(() => {
+    const list = []
+    if (permissions.can_manage_categories) {
+      list.push({
+        href: "/admin/categories",
+        label: "Categorias",
+        description: "Criar, renomear e remover categorias de gasto.",
+        icon: Tag,
+      })
+    }
+    if (permissions.can_manage_invites || permissions.isAdmin) {
+      list.push({
+        href: "/admin/participants",
+        label: "Participantes e permissões",
+        description: "Membros, convidados, cores, tokens de acesso e permissões granulares.",
+        icon: Users,
+      })
+    }
+    if (permissions.can_view_audit) {
+      list.push({
+        href: "/admin/audit",
+        label: "Audit log",
+        description: "Histórico de ações na plataforma (filtros por ator, ação, data).",
+        icon: ScrollText,
+      })
+    }
+    return list
+  }, [permissions])
+
+  React.useEffect(() => {
+    if (!loading && user !== null && sections.length === 0) {
+      router.replace("/dashboard")
+    }
+  }, [user, sections, loading, router])
+
+  if (loading || !user) return null
+  if (sections.length === 0) return null
+
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-8 md:gap-8 md:px-8 md:py-12">
       <header className="space-y-2">
@@ -35,13 +62,12 @@ export default function AdminOverviewPage() {
           Painel administrativo
         </h1>
         <p className="text-sm text-muted-foreground">
-          Gerencie categorias, participantes (incluindo convites) e consulte o
-          histórico de atividades.
+          Gerencie categorias, participantes, permissões e consulte o histórico de atividades.
         </p>
       </header>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        {SECTIONS.map(({ href, label, description, icon: Icon }) => (
+        {sections.map(({ href, label, description, icon: Icon }) => (
           <Link
             key={href}
             href={href}
