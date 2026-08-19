@@ -122,7 +122,7 @@ export default function TransactionsPage() {
 
   // Show the skeleton only until ALL caches have finished their first load.
   const initialLoadComplete =
-    !!user && !txLoading && !pLoading && !incLoading && !metrics
+    !!user && !txLoading && !pLoading && !incLoading && !!metrics
   const hasShownContentRef = React.useRef(false)
   if (initialLoadComplete) hasShownContentRef.current = true
   const isLoading = !hasShownContentRef.current
