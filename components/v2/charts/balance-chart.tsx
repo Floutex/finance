@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { format, parseISO } from "date-fns"
+import { ptBR } from "date-fns/locale"
 import {
   Area,
   AreaChart,
@@ -58,16 +59,12 @@ export function BalanceChart({
       )
       if (sliced.length > 0) subset = sliced
     }
-    const data = subset.map((p) => ({
-      ...p,
-      label: format(parseISO(p.date), "dd/MM"),
-    }))
     const first = subset[0]?.balance ?? 0
     const last = subset[subset.length - 1]?.balance ?? 0
     const change = Number((last - first).toFixed(2))
     const percent = first === 0 ? null : Number(((change / Math.abs(first)) * 100).toFixed(1))
     return {
-      chartData: data,
+      chartData: subset,
       summary: { current: last, change, percent },
       hasData: true,
     }
@@ -127,7 +124,14 @@ export function BalanceChart({
                 opacity={0.5}
               />
               <XAxis
-                dataKey="label"
+                dataKey="date"
+                tickFormatter={(date: string) => {
+                  try {
+                    return format(parseISO(date), "dd/MM")
+                  } catch {
+                    return date
+                  }
+                }}
                 stroke="hsl(var(--muted-foreground))"
                 fontSize={10}
                 tickLine={false}
@@ -157,7 +161,7 @@ export function BalanceChart({
                   const deltas = dailyBreakdown?.[p.date] ?? []
                   return (
                     <ChartTooltip
-                      title={format(parseISO(p.date), "dd 'de' MMM, yyyy")}
+                      title={format(parseISO(p.date), "dd 'de' MMM, yyyy", { locale: ptBR })}
                       className="min-w-[200px] max-w-[280px]"
                     >
                       <div className="flex items-baseline justify-between gap-4">
