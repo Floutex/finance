@@ -6,7 +6,7 @@ import { ArrowLeft } from "lucide-react"
 
 import { Button } from "@/components/v2/primitives/button"
 import { Currency } from "@/components/v2/finance/currency"
-import { monochromeChartPalette, formatCurrency } from "@/lib/v2/tokens"
+import { categoryChartPalette, formatCurrency } from "@/lib/v2/tokens"
 import { cn } from "@/components/v2/primitives/utils"
 
 export type CategoryTotal = {
@@ -204,7 +204,7 @@ export function CategoryPieChart({
           return html
         },
       },
-      color: monochromeChartPalette,
+      color: categoryChartPalette,
       series: [
         {
           type: "pie",
@@ -326,7 +326,7 @@ export function CategoryPieChart({
               const isClickableRow = clickable && s.category !== "Outros"
               const meta = rowMeta(s)
               const color =
-                monochromeChartPalette[i % monochromeChartPalette.length]
+                categoryChartPalette[i % categoryChartPalette.length]
               return (
                 <li key={`${s.category}-${i}`}>
                   <button

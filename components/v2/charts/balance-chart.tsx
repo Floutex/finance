@@ -127,7 +127,7 @@ export function BalanceChart({
                 dataKey="date"
                 tickFormatter={(date: string) => {
                   try {
-                    return format(parseISO(date), "dd/MM")
+                    return format(parseISO(date), "dd/MM/yy")
                   } catch {
                     return date
                   }
@@ -136,7 +136,7 @@ export function BalanceChart({
                 fontSize={10}
                 tickLine={false}
                 axisLine={false}
-                minTickGap={32}
+                minTickGap={28}
                 dy={6}
               />
               <YAxis

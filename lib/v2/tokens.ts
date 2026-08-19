@@ -72,20 +72,23 @@ export function participantAvatar(hex: string) {
 }
 
 // ── Chart palette ───────────────────────────────────────────────────────────
-// Monochromatic grayscale/zinc palette for category breakdowns.
-// High-contrast alternating steps ensuring adjacent slices never blend.
-export const monochromeChartPalette = [
-  "#f4f4f5", // Zinc 100 (Bright)
-  "#71717a", // Zinc 500 (Mid)
-  "#d4d4d8", // Zinc 300 (Light silver)
-  "#3f3f46", // Zinc 700 (Charcoal)
-  "#a1a1aa", // Zinc 400 (Slate)
-  "#27272a", // Zinc 800 (Dark graphite)
-  "#e4e4e7", // Zinc 200 (Cool white)
-  "#52525b", // Zinc 600 (Deep zinc)
+// Whitish / pastel palette for category breakdowns.
+// High lightness, desaturated soft hues that contrast cleanly on dark surfaces.
+export const categoryChartPalette = [
+  "#c7d2fe", // Soft Indigo / Periwinkle
+  "#fed7aa", // Soft Peach / Warm Apricot
+  "#a7f3d0", // Soft Mint / Light Emerald
+  "#fecdd3", // Soft Rose / Blush
+  "#bae6fd", // Soft Ice / Sky Blue
+  "#fde68a", // Soft Butter / Pale Amber
+  "#ddd6fe", // Soft Lavender / Lilac
+  "#99f6e4", // Soft Teal / Aquamarine
+  "#f5d0fe", // Soft Mauve / Pale Fuchsia
+  "#e2e8f0", // Soft Slate / Pale Silver
 ] as const
 
-export const chartPalette = monochromeChartPalette
+export const chartPalette = categoryChartPalette
+export const monochromeChartPalette = categoryChartPalette
 
 // ── Numeric formatting ──────────────────────────────────────────────────────
 // Re-exports from lib/constants to keep imports centralized for v2 consumers.
