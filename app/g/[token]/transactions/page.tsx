@@ -208,7 +208,7 @@ export default function GuestTransactionsPage() {
         allowCreateCategory={permissions.can_manage_categories}
         createDefaults={{
           paid_by: user,
-          participants: defaultParticipants,
+          participants: [user],
         }}
         payerOptions={payerOptions}
         onSubmit={async (values) => {

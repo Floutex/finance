@@ -264,7 +264,7 @@ export default function DashboardPage() {
         allowCreateCategory={canManageCategories}
         createDefaults={{
           paid_by: user ?? undefined,
-          participants: defaultParticipants,
+          participants: user ? [user] : [],
         }}
         onSubmit={async (values) => {
           if (m.sheetMode === "create" || m.sheetMode === null) {

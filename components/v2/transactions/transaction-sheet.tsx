@@ -53,7 +53,8 @@ export function TransactionSheet({
       return {
         ...blankFormValues({
           paid_by: createDefaults?.paid_by ?? currentUser,
-          participants: createDefaults?.participants ?? [],
+          participants:
+            createDefaults?.participants ?? (currentUser ? [currentUser] : []),
         }),
         ...createDefaults,
       }
