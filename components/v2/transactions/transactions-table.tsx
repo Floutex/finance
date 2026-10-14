@@ -186,6 +186,16 @@ export function TransactionsTable({
         },
       },
       {
+        accessorKey: "event",
+        size: 140,
+        header: "Evento",
+        cell: ({ row }) => {
+          const e = row.original.event?.trim()
+          if (!e) return <span className="text-xs text-muted-foreground">—</span>
+          return <span className="truncate text-xs text-muted-foreground">{e}</span>
+        },
+      },
+      {
         accessorKey: "paid_by",
         size: 140,
         header: "Pago por",

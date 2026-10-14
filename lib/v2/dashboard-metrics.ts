@@ -14,7 +14,7 @@ export type Transaction = Tables<"shared_transactions">
 export type MonthlyIncome = Tables<"monthly_incomes">
 
 export type DateRange = { start?: string; end?: string }
-export type Filters = DateRange & { search?: string }
+export type Filters = DateRange & { search?: string; event?: string }
 
 export type CategoryTotal = { category: string; total: number }
 
@@ -68,6 +68,7 @@ function passesSearch(t: Transaction, search: string): boolean {
   return (
     lower(normalizeText(t.description)).includes(search) ||
     lower(normalizeText(t.category)).includes(search) ||
+    lower(normalizeText(t.event)).includes(search) ||
     lower(t.paid_by).includes(search)
   )
 }
@@ -96,7 +97,7 @@ export function computeDashboardMetrics(args: {
 }): DashboardMetrics {
   const { transactions, monthlyIncomes, memberNames, currentUser } = args
   const search = (args.filters?.search ?? "").trim().toLowerCase()
-  const { start, end } = args.filters ?? {}
+  const { start, end, event } = args.filters ?? {}
 
   // ── Visibility ──
   // Admins now see only their own transactions by default; the `/transactions`
@@ -120,7 +121,10 @@ export function computeDashboardMetrics(args: {
 
   // ── Date/search filter ──
   const filteredTransactions = userTransactions.filter(
-    (t) => passesDate(t, start, end) && passesSearch(t, search)
+    (t) =>
+      passesDate(t, start, end) &&
+      passesSearch(t, search) &&
+      (!event || t.event === event)
   )
 
   // ── Period stats ──

@@ -30,20 +30,71 @@ import {
 import { buttonVariants } from "@/components/v2/primitives/button"
 import { cn } from "@/components/v2/primitives/utils"
 import { reloadTransactions } from "@/lib/transactions-cache"
+import { upsertCategory, upsertEvent } from "@/lib/supabase"
 
-type Category = { id: string | null; name: string; inTable: boolean; usage: number }
+type Item = { id: string | null; name: string; inTable: boolean; usage: number }
 
 type Action = { kind: "rename" | "merge"; from: string; to: string }
 
-type Props = { actor: string }
+const KINDS = {
+  category: {
+    endpoint: "/api/admin/categories",
+    create: upsertCategory,
+    title: "Categorias",
+    newLabel: "Nova categoria",
+    createLabel: "Criar categoria",
+    filterPlaceholder: "Filtrar categorias…",
+    noMatch: "Nenhuma categoria corresponde ao filtro.",
+    empty: "Nenhuma categoria criada ainda.",
+    orphan: "Órfã",
+    orphanHint: "Usada em transações, mas fora da lista de categorias.",
+    renamed: "Categoria renomeada.",
+    merged: "Categorias mescladas.",
+    deleted: "Categoria excluída.",
+    created: "Categoria criada.",
+    exists: "Categoria já existe.",
+    renameTitle: "Renomear categoria",
+    mergeTitle: "Mesclar categoria",
+    mergeTarget: "Categoria destino",
+    mergeInto: "em outra categoria, existente ou nova.",
+    deleteTitle: "Excluir categoria?",
+    example: "Ex.: Mercado",
+  },
+  event: {
+    endpoint: "/api/admin/events",
+    create: upsertEvent,
+    title: "Eventos",
+    newLabel: "Novo evento",
+    createLabel: "Criar evento",
+    filterPlaceholder: "Filtrar eventos…",
+    noMatch: "Nenhum evento corresponde ao filtro.",
+    empty: "Nenhum evento criado ainda.",
+    orphan: "Órfão",
+    orphanHint: "Usado em transações, mas fora da lista de eventos.",
+    renamed: "Evento renomeado.",
+    merged: "Eventos mesclados.",
+    deleted: "Evento excluído.",
+    created: "Evento criado.",
+    exists: "Evento já existe.",
+    renameTitle: "Renomear evento",
+    mergeTitle: "Mesclar evento",
+    mergeTarget: "Evento destino",
+    mergeInto: "em outro evento, existente ou novo.",
+    deleteTitle: "Excluir evento?",
+    example: "Ex.: Viagem Floripa",
+  },
+}
 
-export function CategoriesManager({ actor }: Props) {
-  const [items, setItems] = React.useState<Category[]>([])
+type Props = { actor: string; kind: keyof typeof KINDS }
+
+export function LabelManager({ actor, kind }: Props) {
+  const copy = KINDS[kind]
+  const [items, setItems] = React.useState<Item[]>([])
   const [loading, setLoading] = React.useState(true)
   const [filter, setFilter] = React.useState("")
   const [action, setAction] = React.useState<Action | null>(null)
   const [actionPending, setActionPending] = React.useState(false)
-  const [deleteTarget, setDeleteTarget] = React.useState<Category | null>(null)
+  const [deleteTarget, setDeleteTarget] = React.useState<Item | null>(null)
   const [deletePending, setDeletePending] = React.useState(false)
   const [addOpen, setAddOpen] = React.useState(false)
   const [addName, setAddName] = React.useState("")
@@ -52,16 +103,16 @@ export function CategoriesManager({ actor }: Props) {
   const load = React.useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch("/api/admin/categories", { cache: "no-store" })
+      const res = await fetch(copy.endpoint, { cache: "no-store" })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? "Falha ao carregar")
-      setItems(json.categories)
+      setItems(json.items)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Falha ao carregar")
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [copy.endpoint])
 
   React.useEffect(() => {
     load()
@@ -72,21 +123,14 @@ export function CategoriesManager({ actor }: Props) {
   )
 
   const callApi = async (
-    kind: "rename" | "merge" | "delete" | "create",
+    action: "rename" | "merge" | "delete",
     from: string,
     to?: string
   ) => {
-    if (kind === "create") {
-      // Direct supabase upsert via the existing endpoint is not exposed for
-      // create — but the API treats "rename to an unused name" identically to
-      // upserting. So we synthesize by inserting into `categories` via
-      // a small client write through the supabase client.
-      throw new Error("create unsupported")
-    }
-    const res = await fetch("/api/admin/categories", {
+    const res = await fetch(copy.endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: kind, from, to, actor }),
+      body: JSON.stringify({ action, from, to, actor }),
     })
     const json = await res.json()
     if (!res.ok) throw new Error(json.error ?? "Falha")
@@ -101,7 +145,7 @@ export function CategoriesManager({ actor }: Props) {
     try {
       await callApi(action.kind, action.from, to)
       toast.success(
-        action.kind === "rename" ? "Categoria renomeada." : "Categorias mescladas."
+        action.kind === "rename" ? copy.renamed : copy.merged
       )
       await reloadTransactions()
       await load()
@@ -118,7 +162,7 @@ export function CategoriesManager({ actor }: Props) {
     setDeletePending(true)
     try {
       await callApi("delete", deleteTarget.name)
-      toast.success("Categoria excluída.")
+      toast.success(copy.deleted)
       await load()
       setDeleteTarget(null)
     } catch (e) {
@@ -132,15 +176,14 @@ export function CategoriesManager({ actor }: Props) {
     const name = addName.trim()
     if (!name) return
     if (items.some((c) => c.name.toLowerCase() === name.toLowerCase())) {
-      toast.error("Categoria já existe.")
+      toast.error(copy.exists)
       return
     }
     setAddPending(true)
     try {
-      const { upsertCategory } = await import("@/lib/supabase")
-      const { error } = await upsertCategory(name)
+      const { error } = await copy.create(name)
       if (error) throw new Error(error.message)
-      toast.success("Categoria criada.")
+      toast.success(copy.created)
       await load()
       setAddOpen(false)
       setAddName("")
@@ -159,15 +202,12 @@ export function CategoriesManager({ actor }: Props) {
             Admin
           </p>
           <h1 className="font-display text-3xl font-semibold tracking-tight">
-            Categorias
+            {copy.title}
           </h1>
-          <p className="text-sm text-muted-foreground">
-            Crie, renomeie, mescle ou remova categorias. Categorias com uso em transações precisam ser renomeadas ou mescladas antes da remoção.
-          </p>
         </div>
         <Button onClick={() => setAddOpen(true)}>
           <Plus />
-          Nova categoria
+          {copy.newLabel}
         </Button>
       </header>
 
@@ -176,7 +216,7 @@ export function CategoriesManager({ actor }: Props) {
           <div className="relative max-w-xs">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Filtrar categorias…"
+              placeholder={copy.filterPlaceholder}
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
               className="h-9 pl-8"
@@ -194,9 +234,7 @@ export function CategoriesManager({ actor }: Props) {
           </ul>
         ) : filtered.length === 0 ? (
           <div className="px-6 py-12 text-center text-sm text-muted-foreground">
-            {filter
-              ? "Nenhuma categoria corresponde ao filtro."
-              : "Nenhuma categoria criada ainda."}
+            {filter ? copy.noMatch : copy.empty}
           </div>
         ) : (
           <ul className="divide-y divide-border">
@@ -210,8 +248,9 @@ export function CategoriesManager({ actor }: Props) {
                       <Badge
                         variant="outline"
                         className="ml-2 text-[10px] uppercase tracking-wider"
+                        title={copy.orphanHint}
                       >
-                        Órfã
+                        {copy.orphan}
                       </Badge>
                     )}
                   </p>
@@ -245,6 +284,11 @@ export function CategoriesManager({ actor }: Props) {
                       cat.usage > 0 && "opacity-40"
                     )}
                     aria-label="Excluir"
+                    title={
+                      cat.usage > 0
+                        ? "Em uso: renomeie ou mescle antes de excluir."
+                        : undefined
+                    }
                     disabled={cat.usage > 0}
                     onClick={() => setDeleteTarget(cat)}
                   >
@@ -257,7 +301,6 @@ export function CategoriesManager({ actor }: Props) {
         )}
       </div>
 
-      {/* Rename / merge dialog */}
       <Dialog
         open={action !== null}
         onOpenChange={(o) => {
@@ -269,25 +312,24 @@ export function CategoriesManager({ actor }: Props) {
             <>
               <DialogHeader>
                 <DialogTitle>
-                  {action.kind === "rename" ? "Renomear categoria" : "Mesclar categoria"}
+                  {action.kind === "rename" ? copy.renameTitle : copy.mergeTitle}
                 </DialogTitle>
                 <DialogDescription>
                   {action.kind === "rename" ? (
                     <>
-                      Renomear <strong>{action.from}</strong> — todas as transações
-                      passam a usar o novo nome.
+                      Todas as transações de <strong>{action.from}</strong> passam
+                      a usar o novo nome.
                     </>
                   ) : (
                     <>
-                      Mesclar <strong>{action.from}</strong> em outra categoria existente
-                      ou nova.
+                      Mesclar <strong>{action.from}</strong> {copy.mergeInto}
                     </>
                   )}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-1.5">
                 <Label htmlFor="cat-to">
-                  {action.kind === "rename" ? "Novo nome" : "Categoria destino"}
+                  {action.kind === "rename" ? "Novo nome" : copy.mergeTarget}
                 </Label>
                 <Input
                   id="cat-to"
@@ -334,7 +376,6 @@ export function CategoriesManager({ actor }: Props) {
         </DialogContent>
       </Dialog>
 
-      {/* Delete confirm */}
       <AlertDialog
         open={deleteTarget !== null}
         onOpenChange={(o) => {
@@ -343,12 +384,12 @@ export function CategoriesManager({ actor }: Props) {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir categoria?</AlertDialogTitle>
+            <AlertDialogTitle>{copy.deleteTitle}</AlertDialogTitle>
             <AlertDialogDescription>
               {deleteTarget && (
                 <>
-                  Excluir <strong>{deleteTarget.name}</strong>. Categorias com transações
-                  associadas precisam ser renomeadas ou mescladas antes.
+                  <strong>{deleteTarget.name}</strong> sai da lista. Essa ação não
+                  pode ser desfeita.
                 </>
               )}
             </AlertDialogDescription>
@@ -370,7 +411,6 @@ export function CategoriesManager({ actor }: Props) {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Add new */}
       <Dialog
         open={addOpen}
         onOpenChange={(o) => {
@@ -382,10 +422,7 @@ export function CategoriesManager({ actor }: Props) {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Nova categoria</DialogTitle>
-            <DialogDescription>
-              Categorias ficam disponíveis no autocomplete do formulário de transações.
-            </DialogDescription>
+            <DialogTitle>{copy.newLabel}</DialogTitle>
           </DialogHeader>
           <div className="space-y-1.5">
             <Label htmlFor="cat-name">Nome</Label>
@@ -397,7 +434,7 @@ export function CategoriesManager({ actor }: Props) {
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleAdd()
               }}
-              placeholder="Ex.: Mercado"
+              placeholder={copy.example}
             />
           </div>
           <DialogFooter>
@@ -410,7 +447,7 @@ export function CategoriesManager({ actor }: Props) {
             </Button>
             <Button onClick={handleAdd} disabled={addPending || !addName.trim()}>
               {addPending ? <Loader2 className="size-4 animate-spin" /> : <Plus />}
-              Criar
+              {copy.createLabel}
             </Button>
           </DialogFooter>
         </DialogContent>

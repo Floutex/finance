@@ -32,6 +32,24 @@ export type Database = {
         }
         Relationships: []
       }
+      events: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       monthly_incomes: {
         Row: {
           amount: number
@@ -135,6 +153,7 @@ export type Database = {
           amount: number | null
           amount_owed: number | null
           category: string | null
+          event: string | null
           created_at: string
           custom_shares: Json | null
           date: string
@@ -151,6 +170,7 @@ export type Database = {
           amount?: number | null
           amount_owed?: number | null
           category?: string | null
+          event?: string | null
           created_at?: string
           custom_shares?: Json | null
           date: string
@@ -167,6 +187,7 @@ export type Database = {
           amount?: number | null
           amount_owed?: number | null
           category?: string | null
+          event?: string | null
           created_at?: string
           custom_shares?: Json | null
           date?: string

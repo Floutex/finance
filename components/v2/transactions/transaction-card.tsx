@@ -83,6 +83,12 @@ export function TransactionCard({
               <span className="truncate">{transaction.category}</span>
             </>
           )}
+          {transaction.event?.trim() && (
+            <>
+              <span aria-hidden>·</span>
+              <span className="truncate">{transaction.event}</span>
+            </>
+          )}
         </div>
         {(transaction.participants?.length ?? 0) > 0 && (
           <ParticipantStack

@@ -63,6 +63,7 @@ export function TransactionSheet({
     return {
       description: t.description ?? "",
       category: t.category ?? "",
+      event: t.event ?? "",
       paid_by: t.paid_by ?? "",
       date: t.date,
       amount: t.amount !== null ? String(t.amount).replace(".", ",") : "",

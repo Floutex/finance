@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Check, ChevronsUpDown, Plus, Tag, X } from "lucide-react"
+import { CalendarHeart, Check, ChevronsUpDown, Plus, Tag, X, type LucideIcon } from "lucide-react"
 
 import { cn } from "@/components/v2/primitives/utils"
 import {
@@ -32,6 +32,15 @@ type CategoryComboboxProps = {
   allowCreate?: boolean
   /** Offer a "Sem categoria" option to clear the value. Default true. */
   allowEmpty?: boolean
+  icon?: LucideIcon
+  labels?: Partial<typeof categoryLabels>
+}
+
+const categoryLabels = {
+  search: "Buscar categoria…",
+  empty: "Nenhuma categoria.",
+  none: "Sem categoria",
+  group: "Categorias",
 }
 
 /** lowercase + strip accents for forgiving search */
@@ -57,7 +66,10 @@ export function CategoryCombobox({
   className,
   allowCreate = true,
   allowEmpty = true,
+  icon: Icon = Tag,
+  labels: labelOverrides,
 }: CategoryComboboxProps) {
+  const labels = { ...categoryLabels, ...labelOverrides }
   const [open, setOpen] = React.useState(false)
   const [query, setQuery] = React.useState("")
 
@@ -99,7 +111,7 @@ export function CategoryCombobox({
             className
           )}
         >
-          <Tag className="size-4 shrink-0 opacity-70" />
+          <Icon className="size-4 shrink-0 opacity-70" />
           <span className="flex-1 truncate">{value || placeholder}</span>
           <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
         </button>
@@ -110,13 +122,13 @@ export function CategoryCombobox({
       >
         <Command shouldFilter={false}>
           <CommandInput
-            placeholder="Buscar categoria…"
+            placeholder={labels.search}
             value={query}
             onValueChange={setQuery}
           />
           <CommandList>
             {filtered.length === 0 && !(allowCreate && query.trim()) && (
-              <CommandEmpty>Nenhuma categoria.</CommandEmpty>
+              <CommandEmpty>{labels.empty}</CommandEmpty>
             )}
 
             {allowEmpty && (
@@ -127,21 +139,21 @@ export function CategoryCombobox({
                   className="text-muted-foreground"
                 >
                   <X className="size-4 opacity-70" />
-                  Sem categoria
+                  {labels.none}
                   {!value && <Check className="ml-auto size-4" />}
                 </CommandItem>
               </CommandGroup>
             )}
 
             {filtered.length > 0 && (
-              <CommandGroup heading="Categorias">
+              <CommandGroup heading={labels.group}>
                 {filtered.map((c) => (
                   <CommandItem
                     key={c.id}
                     value={c.name}
                     onSelect={() => select(c.name)}
                   >
-                    <Tag className="size-4 opacity-70" />
+                    <Icon className="size-4 opacity-70" />
                     <span className="truncate">{c.name}</span>
                     {value === c.name && <Check className="ml-auto size-4" />}
                   </CommandItem>
@@ -165,5 +177,30 @@ export function CategoryCombobox({
         </Command>
       </PopoverContent>
     </Popover>
+  )
+}
+
+export function EventCombobox({
+  events,
+  placeholder = "Sem evento",
+  labels,
+  ...props
+}: Omit<CategoryComboboxProps, "categories" | "icon"> & {
+  events: Category[]
+}) {
+  return (
+    <CategoryCombobox
+      {...props}
+      categories={events}
+      placeholder={placeholder}
+      icon={CalendarHeart}
+      labels={{
+        search: "Buscar ou criar evento…",
+        empty: "Nenhum evento.",
+        none: "Sem evento",
+        group: "Eventos",
+        ...labels,
+      }}
+    />
   )
 }

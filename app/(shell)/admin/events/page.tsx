@@ -1,0 +1,24 @@
+"use client"
+
+import * as React from "react"
+import { useRouter } from "next/navigation"
+import { LabelManager } from "@/components/v2/admin/label-manager"
+import { useSessionUser } from "@/hooks/use-session-user"
+import { useUserPermissions } from "@/hooks/use-user-permissions"
+
+export default function AdminEventsPage() {
+  const user = useSessionUser()
+  const { permissions, loading } = useUserPermissions(user)
+  const router = useRouter()
+
+  React.useEffect(() => {
+    if (!loading && user !== null && !permissions.can_manage_categories) {
+      router.replace("/dashboard")
+    }
+  }, [user, permissions.can_manage_categories, loading, router])
+
+  if (loading || !user) return null
+  if (!permissions.can_manage_categories) return null
+
+  return <LabelManager actor={user} kind="event" />
+}

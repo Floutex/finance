@@ -41,6 +41,7 @@ const TRACKED_FIELDS: Array<{
 }> = [
   { key: "description", label: "Descrição" },
   { key: "category", label: "Categoria" },
+  { key: "event", label: "Evento" },
   { key: "paid_by", label: "Pago por" },
   { key: "date", label: "Data" },
   {

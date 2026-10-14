@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { CategoriesManager } from "@/components/v2/admin/categories-manager"
+import { LabelManager } from "@/components/v2/admin/label-manager"
 import { useSessionUser } from "@/hooks/use-session-user"
 import { useUserPermissions } from "@/hooks/use-user-permissions"
 
@@ -20,5 +20,5 @@ export default function AdminCategoriesPage() {
   if (loading || !user) return null
   if (!permissions.can_manage_categories) return null
 
-  return <CategoriesManager actor={user} />
+  return <LabelManager actor={user} kind="category" />
 }

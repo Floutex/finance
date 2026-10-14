@@ -8,17 +8,13 @@ import {
   type DashboardMetrics,
 } from "@/lib/v2/dashboard-metrics"
 import type { Tables } from "@/lib/database.types"
-import type { TransactionsToolbarValue } from "@/components/v2/transactions/transactions-toolbar"
-
-const EMPTY_TOOLBAR: TransactionsToolbarValue = {
-  search: "",
-  start: "",
-  end: "",
-  activeRange: null,
-}
+import {
+  EMPTY_TOOLBAR,
+  type TransactionsToolbarValue,
+} from "@/components/v2/transactions/transactions-toolbar"
 
 export type DateRange = { min: string; max: string }
-export type EffectiveFilters = { search: string; start?: string; end?: string }
+export type EffectiveFilters = { search: string; event?: string; start?: string; end?: string }
 
 export type UseDashboardDataArgs = {
   transactions: Tables<"shared_transactions">[]
@@ -63,10 +59,11 @@ export function useDashboardData({
   const effectiveFilters = React.useMemo<EffectiveFilters>(() => {
     if (toolbar.activeRange) {
       const r = applyQuickRange(fullDateRange, toolbar.activeRange)
-      return { search: toolbar.search, start: r.start, end: r.end }
+      return { search: toolbar.search, event: toolbar.event || undefined, start: r.start, end: r.end }
     }
     return {
       search: toolbar.search,
+      event: toolbar.event || undefined,
       start: toolbar.start || undefined,
       end: toolbar.end || undefined,
     }

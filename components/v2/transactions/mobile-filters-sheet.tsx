@@ -17,7 +17,12 @@ import { Label } from "@/components/v2/primitives/label"
 import { Badge } from "@/components/v2/primitives/badge"
 import { DateRangePicker } from "@/components/v2/primitives/date-picker"
 import { cn } from "@/components/v2/primitives/utils"
-import type { TransactionsToolbarValue } from "@/components/v2/transactions/transactions-toolbar"
+import {
+  EMPTY_TOOLBAR,
+  type TransactionsToolbarValue,
+} from "@/components/v2/transactions/transactions-toolbar"
+import { EventCombobox } from "@/components/v2/transactions/category-combobox"
+import { useEvents } from "@/hooks/use-events"
 
 const RANGES = ["1M", "3M", "6M", "1A", "ALL"] as const
 type Range = (typeof RANGES)[number]
@@ -44,6 +49,7 @@ export function MobileFiltersSheet({
 }: MobileFiltersSheetProps) {
   const [open, setOpen] = React.useState(false)
   const [draft, setDraft] = React.useState(value)
+  const { events } = useEvents()
 
   React.useEffect(() => {
     if (open) setDraft(value)
@@ -51,6 +57,7 @@ export function MobileFiltersSheet({
 
   const activeCount = [
     value.search ? 1 : 0,
+    value.event ? 1 : 0,
     value.start ? 1 : 0,
     value.end ? 1 : 0,
     value.activeRange ? 1 : 0,
@@ -62,14 +69,8 @@ export function MobileFiltersSheet({
   }
 
   const clear = () => {
-    const empty: TransactionsToolbarValue = {
-      search: "",
-      start: "",
-      end: "",
-      activeRange: null,
-    }
-    setDraft(empty)
-    onChange(empty)
+    setDraft(EMPTY_TOOLBAR)
+    onChange(EMPTY_TOOLBAR)
     setOpen(false)
   }
 
@@ -107,13 +108,27 @@ export function MobileFiltersSheet({
               <Label htmlFor="mfilter-search">Buscar</Label>
               <Input
                 id="mfilter-search"
-                placeholder="Descrição, categoria, pagador…"
+                placeholder="Descrição, categoria, evento, pagador…"
                 value={draft.search}
                 onChange={(e) =>
                   setDraft((d) => ({ ...d, search: e.target.value }))
                 }
               />
             </div>
+            {(events.length > 0 || draft.event) && (
+              <div className="space-y-1.5">
+                <Label htmlFor="mfilter-event">Evento</Label>
+                <EventCombobox
+                  id="mfilter-event"
+                  value={draft.event}
+                  onChange={(event) => setDraft((d) => ({ ...d, event }))}
+                  events={events}
+                  allowCreate={false}
+                  placeholder="Todos os eventos"
+                  labels={{ search: "Buscar evento…", none: "Todos os eventos" }}
+                />
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Período rápido</Label>
               <div className="grid grid-cols-5 gap-1.5">

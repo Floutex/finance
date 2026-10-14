@@ -7,15 +7,26 @@ import { cn } from "@/components/v2/primitives/utils"
 import { Button } from "@/components/v2/primitives/button"
 import { Input } from "@/components/v2/primitives/input"
 import { DateRangePicker } from "@/components/v2/primitives/date-picker"
+import { EventCombobox } from "@/components/v2/transactions/category-combobox"
+import { useEvents } from "@/hooks/use-events"
 
 const RANGES = ["1M", "3M", "6M", "1A", "ALL"] as const
 type Range = (typeof RANGES)[number]
 
 export type TransactionsToolbarValue = {
   search: string
+  event: string
   start: string
   end: string
   activeRange: Range | null
+}
+
+export const EMPTY_TOOLBAR: TransactionsToolbarValue = {
+  search: "",
+  event: "",
+  start: "",
+  end: "",
+  activeRange: null,
 }
 
 type TransactionsToolbarProps = {
@@ -41,6 +52,8 @@ export function TransactionsToolbar({
   disabledQuickRange,
   className,
 }: TransactionsToolbarProps) {
+  const { events } = useEvents()
+
   const setRange = (range: Range) => {
     onChange({ ...value, activeRange: range })
   }
@@ -52,22 +65,34 @@ export function TransactionsToolbar({
   const setRangeDates = (next: { start: string; end: string }) =>
     onChange({ ...value, start: next.start, end: next.end, activeRange: null })
 
-  const clearAll = () =>
-    onChange({ search: "", start: "", end: "", activeRange: null })
+  const clearAll = () => onChange(EMPTY_TOOLBAR)
 
-  const hasFilter = value.search || value.start || value.end || value.activeRange
+  const hasFilter =
+    value.search || value.event || value.start || value.end || value.activeRange
 
   return (
     <div className={cn("hidden flex-wrap items-center gap-2 md:flex", className)}>
       <div className="relative w-full max-w-xs">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Buscar descrição, categoria, pagador…"
+          placeholder="Buscar descrição, categoria, evento, pagador…"
           value={value.search}
           onChange={(e) => setSearch(e.target.value)}
           className="h-9 pl-8"
         />
       </div>
+
+      {(events.length > 0 || value.event) && (
+        <EventCombobox
+          value={value.event}
+          onChange={(event) => onChange({ ...value, event })}
+          events={events}
+          allowCreate={false}
+          placeholder="Todos os eventos"
+          labels={{ search: "Buscar evento…", none: "Todos os eventos" }}
+          className="w-[200px]"
+        />
+      )}
 
       <div className="ml-auto flex items-center gap-2">
         <div className="flex h-9 items-center rounded-md border border-border bg-transparent p-0.5">

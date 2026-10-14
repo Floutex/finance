@@ -57,6 +57,19 @@ export const getCategories = async () => {
   return await client.from("categories").select("*").order("name", { ascending: true })
 }
 
+export const getEvents = async () => {
+  const client = getSupabaseClient()
+  return await client.from("events").select("*").order("created_at", { ascending: false })
+}
+
+export const upsertEvent = async (name: string) => {
+  const value = name.trim()
+  if (!value) return { error: null }
+  return await getSupabaseClient()
+    .from("events")
+    .upsert({ name: value }, { onConflict: "name", ignoreDuplicates: true })
+}
+
 export const getMonthlyIncomes = async () => {
   const client = getSupabaseClient()
   return await client.from("monthly_incomes").select("*").order("year_month", { ascending: false })

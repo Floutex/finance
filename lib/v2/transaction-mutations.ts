@@ -4,7 +4,7 @@
  * flow so consumers don't reach into Supabase directly.
  */
 
-import { getSupabaseClient, bulkDeleteByIds, bulkUpdateByIds } from "@/lib/supabase"
+import { getSupabaseClient, bulkDeleteByIds, bulkUpdateByIds, upsertEvent } from "@/lib/supabase"
 import { uploadReceipt } from "@/lib/storage"
 import type { Tables, TablesInsert, TablesUpdate } from "@/lib/database.types"
 
@@ -13,6 +13,7 @@ type Transaction = Tables<"shared_transactions">
 export type CreatePayload = {
   description: string
   category: string | null
+  event?: string | null
   paid_by: string
   date: string
   amount: number
@@ -51,6 +52,7 @@ export async function createTransaction(p: CreatePayload): Promise<Transaction> 
   const insert: TablesInsert<"shared_transactions"> = {
     description: p.description,
     category: p.category,
+    event: p.event,
     paid_by: p.paid_by,
     date: p.date,
     amount: p.amount,
@@ -65,6 +67,7 @@ export async function createTransaction(p: CreatePayload): Promise<Transaction> 
     .select("*")
     .single()
   if (error) throw new Error(error.message)
+  if (p.event) await upsertEvent(p.event)
   let final = data!
   if (p.receipt_file) {
     try {
@@ -82,6 +85,7 @@ export async function updateTransaction(p: UpdatePayload): Promise<Transaction> 
   const update: TablesUpdate<"shared_transactions"> = {
     description: p.description,
     category: p.category,
+    event: p.event,
     paid_by: p.paid_by,
     date: p.date,
     amount: p.amount,
@@ -97,6 +101,7 @@ export async function updateTransaction(p: UpdatePayload): Promise<Transaction> 
     .select("*")
     .single()
   if (error) throw new Error(error.message)
+  if (p.event) await upsertEvent(p.event)
   let final = data!
   if (p.receipt_file) {
     try {
@@ -152,6 +157,7 @@ export function transactionToFormValues(t: Transaction) {
   return {
     description: t.description ?? "",
     category: t.category ?? "",
+    event: t.event ?? "",
     paid_by: t.paid_by ?? "",
     date: t.date,
     amount: t.amount !== null ? String(t.amount).replace(".", ",") : "",

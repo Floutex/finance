@@ -22,10 +22,12 @@ import {
   SelectValue,
 } from "@/components/v2/primitives/select"
 import { DatePicker } from "@/components/v2/primitives/date-picker"
+import { EventCombobox } from "@/components/v2/transactions/category-combobox"
 import { useCategories } from "@/hooks/use-categories"
+import { useEvents } from "@/hooks/use-events"
 import { useParticipants } from "@/hooks/use-participants"
 
-type QuickField = "category" | "paid_by"
+type QuickField = "category" | "event" | "paid_by"
 
 type BulkQuickEditDialogProps = {
   open: boolean
@@ -45,6 +47,7 @@ export function BulkQuickEditDialog({
   const [field, setField] = React.useState<QuickField>("category")
   const [value, setValue] = React.useState("")
   const { categories } = useCategories()
+  const { events } = useEvents()
   const { members } = useParticipants()
 
   React.useEffect(() => {
@@ -70,12 +73,19 @@ export function BulkQuickEditDialog({
         <div className="grid grid-cols-1 gap-4">
           <div className="space-y-1.5">
             <Label htmlFor="bulk-field">Campo</Label>
-            <Select value={field} onValueChange={(v) => setField(v as QuickField)}>
+            <Select
+              value={field}
+              onValueChange={(v) => {
+                setField(v as QuickField)
+                setValue("")
+              }}
+            >
               <SelectTrigger id="bulk-field">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="category">Categoria</SelectItem>
+                <SelectItem value="event">Evento</SelectItem>
                 <SelectItem value="paid_by">Pago por</SelectItem>
               </SelectContent>
             </Select>
@@ -96,6 +106,16 @@ export function BulkQuickEditDialog({
                   <option key={c.id} value={c.name} />
                 ))}
               </datalist>
+            </div>
+          ) : field === "event" ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="bulk-event">Evento</Label>
+              <EventCombobox
+                id="bulk-event"
+                value={value}
+                onChange={setValue}
+                events={events}
+              />
             </div>
           ) : (
             <div className="space-y-1.5">
@@ -140,6 +160,7 @@ type BulkAdvancedEditDialogProps = {
   pending?: boolean
   onConfirm: (values: {
     category?: string
+    event?: string
     paid_by?: string
     date?: string
   }) => void | Promise<void>
@@ -153,20 +174,23 @@ export function BulkAdvancedEditDialog({
   onConfirm,
 }: BulkAdvancedEditDialogProps) {
   const [category, setCategory] = React.useState("")
+  const [event, setEvent] = React.useState("")
   const [paidBy, setPaidBy] = React.useState("")
   const [date, setDate] = React.useState("")
   const { categories } = useCategories()
+  const { events } = useEvents()
   const { members } = useParticipants()
 
   React.useEffect(() => {
     if (!open) {
       setCategory("")
+      setEvent("")
       setPaidBy("")
       setDate("")
     }
   }, [open])
 
-  const anyValue = category.trim() || paidBy.trim() || date.trim()
+  const anyValue = category.trim() || event.trim() || paidBy.trim() || date.trim()
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -210,7 +234,18 @@ export function BulkAdvancedEditDialog({
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-1.5 md:col-span-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="adv-event">Evento</Label>
+            <EventCombobox
+              id="adv-event"
+              value={event}
+              onChange={setEvent}
+              events={events}
+              placeholder="Manter atual"
+              allowEmpty={false}
+            />
+          </div>
+          <div className="space-y-1.5">
             <Label htmlFor="adv-date">Data</Label>
             <DatePicker
               id="adv-date"
@@ -231,6 +266,7 @@ export function BulkAdvancedEditDialog({
             onClick={() =>
               onConfirm({
                 category: category.trim() || undefined,
+                event: event.trim() || undefined,
                 paid_by: paidBy.trim() || undefined,
                 date: date.trim() || undefined,
               })

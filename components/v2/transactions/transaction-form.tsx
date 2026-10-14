@@ -21,12 +21,13 @@ import { Separator } from "@/components/v2/primitives/separator"
 import { DatePicker } from "@/components/v2/primitives/date-picker"
 import { ParticipantBadge } from "@/components/v2/finance/participant-badge"
 import { ReceiptUpload } from "@/components/v2/transactions/receipt-upload"
-import { CategoryCombobox } from "@/components/v2/transactions/category-combobox"
+import { CategoryCombobox, EventCombobox } from "@/components/v2/transactions/category-combobox"
 import {
   SplitSlider,
   reconcileShares,
 } from "@/components/v2/transactions/split-slider"
 import { useCategories } from "@/hooks/use-categories"
+import { useEvents } from "@/hooks/use-events"
 import { useParticipants } from "@/hooks/use-participants"
 import { normalizeNumber } from "@/lib/constants"
 
@@ -61,6 +62,7 @@ function normalizeShares(
 export type TransactionFormValues = {
   description: string
   category: string
+  event: string
   paid_by: string
   date: string
   amount: string
@@ -71,6 +73,7 @@ export type TransactionFormValues = {
 export type TransactionFormSubmit = {
   description: string
   category: string | null
+  event: string | null
   paid_by: string
   date: string
   amount: number
@@ -82,6 +85,7 @@ export type TransactionFormSubmit = {
 const schema = z.object({
   description: z.string().trim().min(1, "Descrição obrigatória"),
   category: z.string(),
+  event: z.string(),
   paid_by: z.string().min(1, "Selecione quem pagou"),
   date: z.string().min(1, "Data obrigatória"),
   amount: z.string().refine((v) => normalizeNumber(v) !== null, "Valor inválido"),
@@ -96,6 +100,7 @@ export const blankFormValues = (
 ): TransactionFormValues => ({
   description: "",
   category: "",
+  event: "",
   paid_by: defaults.paid_by ?? "",
   date: todayISO(),
   amount: "",
@@ -145,6 +150,7 @@ export function TransactionForm({
   className,
 }: TransactionFormProps) {
   const { categories } = useCategories()
+  const { events } = useEvents()
   const { active: participants, members } = useParticipants()
   const payers = payerOptions ?? members
   const [receiptFile, setReceiptFile] = React.useState<File | null>(null)
@@ -245,6 +251,7 @@ export function TransactionForm({
       await onSubmit({
         description: values.description.trim(),
         category: values.category.trim() || null,
+        event: values.event.trim() || null,
         paid_by: values.paid_by.trim(),
         date: values.date,
         amount: normalizeNumber(values.amount)!,
@@ -366,6 +373,22 @@ export function TransactionForm({
                 onChange={field.onChange}
                 categories={categories}
                 allowCreate={allowCreateCategory}
+              />
+            )}
+          />
+        </div>
+
+        <div className="md:col-span-2 space-y-1.5">
+          <Label htmlFor="event">Evento</Label>
+          <Controller
+            control={control}
+            name="event"
+            render={({ field }) => (
+              <EventCombobox
+                id="event"
+                value={field.value}
+                onChange={field.onChange}
+                events={events}
               />
             )}
           />

@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Tag, Users, ScrollText, ArrowRight } from "lucide-react"
+import { CalendarHeart, Tag, Users, ScrollText, ArrowRight } from "lucide-react"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/v2/primitives/card"
 import { useSessionUser } from "@/hooks/use-session-user"
@@ -22,6 +22,12 @@ export default function AdminOverviewPage() {
         label: "Categorias",
         description: "Criar, renomear e remover categorias de gasto.",
         icon: Tag,
+      })
+      list.push({
+        href: "/admin/events",
+        label: "Eventos",
+        description: "Renomear, mesclar e remover eventos como viagens e festas.",
+        icon: CalendarHeart,
       })
     }
     if (permissions.can_manage_invites || permissions.isAdmin) {

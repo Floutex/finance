@@ -12,6 +12,7 @@ import {
   updateTransaction,
   type CreatePayload,
 } from "@/lib/v2/transaction-mutations"
+import { upsertEvent } from "@/lib/supabase"
 import type { Tables, TablesUpdate } from "@/lib/database.types"
 
 type Transaction = Tables<"shared_transactions">
@@ -57,11 +58,12 @@ export type UseDashboardMutationsResult = {
   handleDelete: () => Promise<void>
   handleBulkDelete: () => Promise<void>
   handleBulkQuickEdit: (input: {
-    field: "category" | "paid_by"
+    field: "category" | "event" | "paid_by"
     value: string
   }) => Promise<void>
   handleBulkAdvancedEdit: (input: {
     category?: string
+    event?: string
     paid_by?: string
     date?: string
   }) => Promise<void>
@@ -197,7 +199,7 @@ export function useDashboardMutations({
   }
 
   const handleBulkQuickEdit = async (input: {
-    field: "category" | "paid_by"
+    field: "category" | "event" | "paid_by"
     value: string
   }) => {
     if (!currentUser) return
@@ -206,6 +208,9 @@ export function useDashboardMutations({
       const values: Record<string, string | null> = {}
       if (input.field === "category") {
         values.category = input.value.trim() || null
+      } else if (input.field === "event") {
+        values.event = input.value.trim() || null
+        if (values.event) await upsertEvent(values.event)
       } else {
         values.paid_by = input.value.trim()
       }
@@ -227,6 +232,7 @@ export function useDashboardMutations({
 
   const handleBulkAdvancedEdit = async (input: {
     category?: string
+    event?: string
     paid_by?: string
     date?: string
   }) => {
@@ -235,6 +241,10 @@ export function useDashboardMutations({
     try {
       const values: Partial<TablesUpdate<"shared_transactions">> = {}
       if (input.category) values.category = input.category
+      if (input.event) {
+        values.event = input.event
+        await upsertEvent(input.event)
+      }
       if (input.paid_by) values.paid_by = input.paid_by
       if (input.date) values.date = input.date
       await bulkUpdate(selectedIds, values, currentUser)

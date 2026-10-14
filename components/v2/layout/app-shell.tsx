@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   Wallet,
   Receipt,
+  CalendarHeart,
   Tag,
   Users,
   ScrollText,
@@ -68,6 +69,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const adminItems: NavItem[] = []
   if (permissions.can_manage_categories) {
     adminItems.push({ label: "Categorias", href: "/admin/categories", icon: Tag })
+    adminItems.push({ label: "Eventos", href: "/admin/events", icon: CalendarHeart })
   }
   if (permissions.can_manage_invites || permissions.isAdmin) {
     adminItems.push({ label: "Participantes", href: "/admin/participants", icon: Users })
