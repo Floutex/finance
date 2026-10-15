@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseClient } from "@/lib/supabase"
 import { parsePermissions, DEFAULT_PERMISSIONS } from "@/lib/permissions"
+import { USERS } from "@/lib/constants"
 
 function genToken(): string {
   const bytes = new Uint8Array(24)
@@ -10,15 +11,14 @@ function genToken(): string {
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/
 
-// GET → list all participants (members + guests) with their tokens, tx count, last activity, is_admin, permissions
+// GET → list all participants with their tokens, tx count, last activity, is_admin, permissions
 export async function GET() {
   const supabase = getSupabaseClient()
 
   const [participantsRes, tokensRes, txRes] = await Promise.all([
     supabase
       .from("participants")
-      .select("id,name,color,kind,is_admin,permissions,is_archived,created_at")
-      .order("kind", { ascending: true })
+      .select("id,name,color,is_admin,permissions,is_archived,created_at")
       .order("name", { ascending: true }),
     supabase
       .from("participant_tokens")
@@ -82,7 +82,7 @@ export async function PATCH(req: NextRequest) {
   }
 
   // Update a participant
-  const participantId = String(body?.guestId ?? body?.participantId ?? "").trim()
+  const participantId = String(body?.participantId ?? "").trim()
   if (!participantId) return NextResponse.json({ error: "participantId obrigatório" }, { status: 400 })
 
   const updates: Record<string, unknown> = {}
@@ -159,13 +159,13 @@ export async function PATCH(req: NextRequest) {
     .select("*")
     .single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ participant: data, guest: data })
+  return NextResponse.json({ participant: data })
 }
 
 // POST → generate a new personal magic-link token for a participant
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const participantId = String(body?.guestId ?? body?.participantId ?? "").trim()
+  const participantId = String(body?.participantId ?? "").trim()
   if (!participantId) return NextResponse.json({ error: "participantId obrigatório" }, { status: 400 })
 
   const supabase = getSupabaseClient()
@@ -173,11 +173,14 @@ export async function POST(req: NextRequest) {
   // Verify the participant exists
   const { data: participant, error: gErr } = await supabase
     .from("participants")
-    .select("id,kind")
+    .select("id,name")
     .eq("id", participantId)
     .maybeSingle()
   if (gErr) return NextResponse.json({ error: gErr.message }, { status: 500 })
   if (!participant) return NextResponse.json({ error: "Participante não encontrado" }, { status: 404 })
+  if (USERS.some((u) => u.name === participant.name)) {
+    return NextResponse.json({ error: "Quem tem PIN entra pelo PIN, sem link" }, { status: 400 })
+  }
 
   const token = genToken()
   const { error } = await supabase

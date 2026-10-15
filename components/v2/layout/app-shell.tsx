@@ -18,31 +18,38 @@ import { OfflineBanner } from "@/components/v2/layout/offline-banner"
 import { ShortcutsCheatsheet } from "@/components/v2/layout/shortcuts-cheatsheet"
 import { UserMenu } from "@/components/v2/layout/user-menu"
 import type { NavItem } from "@/components/v2/layout/nav-section"
-import { SESSION_USER_KEY, USERS } from "@/lib/constants"
+import { clearSession, readSession, validateSession, writeSession } from "@/lib/session"
 import { useUserPermissions } from "@/hooks/use-user-permissions"
 
-/**
- * Authenticated app shell — sidebar + content area. Reads the session user from
- * `sessionStorage` (shared with the legacy /); bounces to /login if absent
- * or unknown. Used by the `(shell)` route group's layout.
- */
 export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const [user, setUser] = React.useState<string | null>(null)
   const [checked, setChecked] = React.useState(false)
 
   React.useEffect(() => {
-    try {
-      const stored = sessionStorage.getItem(SESSION_USER_KEY)
-      if (stored && USERS.some((u) => u.name === stored)) {
-        setUser(stored)
-      } else {
-        router.replace("/login")
-      }
-    } catch {
+    const session = readSession()
+    setChecked(true)
+    if (!session) {
       router.replace("/login")
-    } finally {
-      setChecked(true)
+      return
+    }
+    setUser(session.name)
+
+    let cancelled = false
+    validateSession(session).then((name) => {
+      if (cancelled || name === undefined) return
+      if (name === null) {
+        clearSession()
+        router.replace("/login")
+        return
+      }
+      if (name !== session.name) {
+        writeSession({ ...session, name })
+        window.location.reload()
+      }
+    })
+    return () => {
+      cancelled = true
     }
   }, [router])
 

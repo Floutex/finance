@@ -13,7 +13,7 @@ type RequestBody = {
   text: string
   /** Usuário logado — pagador padrão quando o texto não diz quem pagou. */
   currentUser: string
-  /** Nomes que podem ser "pago por" (membros, ou só o convidado no guest). */
+  /** Nomes que podem ser "pago por" (todos, ou só quem registra sem a permissão). */
   members: string[]
   /** Nomes de participantes ativos que podem entrar na divisão. */
   participants: string[]

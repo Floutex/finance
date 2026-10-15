@@ -25,8 +25,6 @@ export function useParticipants() {
 
     const all = cache.data ?? []
     const active = useMemo(() => all.filter(p => !p.is_archived), [all])
-    const members = useMemo(() => active.filter(p => p.kind === "member"), [active])
-    const guests = useMemo(() => active.filter(p => p.kind === "guest"), [active])
 
     const reload = useCallback(async () => reloadParticipants(), [])
     const updateCache = useCallback(
@@ -37,8 +35,6 @@ export function useParticipants() {
     return {
         all,
         active,
-        members,
-        guests,
         loading: cache.loading,
         error: cache.error,
         reload,

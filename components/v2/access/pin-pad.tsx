@@ -3,7 +3,8 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import { cn } from "@/components/v2/primitives/utils"
-import { SESSION_USER_KEY, USERS } from "@/lib/constants"
+import { USERS } from "@/lib/constants"
+import { writeSession } from "@/lib/session"
 
 const PIN_LENGTH = 4
 const ERROR_RESET_MS = 800
@@ -46,9 +47,7 @@ export function PinPad() {
       return
     }
 
-    try {
-      sessionStorage.setItem(SESSION_USER_KEY, match.name)
-    } catch {}
+    writeSession({ name: match.name })
     setResolvedUser(match.name)
     setState("success")
     // Slight delay so the success state is perceptible before navigating.

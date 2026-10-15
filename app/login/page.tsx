@@ -15,6 +15,9 @@ export default function LoginPage() {
           </p>
         </div>
         <PinPad />
+        <p className="text-center text-xs text-muted-foreground">
+          Não tem PIN? Abra o seu link pessoal para entrar.
+        </p>
       </div>
     </div>
   )

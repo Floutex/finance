@@ -29,7 +29,7 @@ type TransactionSheetProps = {
   createDefaults?: Partial<TransactionFormValues>
   /** Persistence callback. The parent integrates with cache/toasts. */
   onSubmit: (values: TransactionFormSubmit) => Promise<void>
-  /** Override "Pago por" options (defaults to members in the form). */
+  /** Override "Pago por" options (defaults to active participants). */
   payerOptions?: { id: string; name: string }[]
   /** Whether the user may change who paid. */
   canEditPayer?: boolean

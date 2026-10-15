@@ -71,10 +71,7 @@ export type UseDashboardMutationsResult = {
 }
 
 /**
- * Shared mutation handlers + dialog state for the dashboard pages. Member and
- * guest shells call this with their own `currentUser`/`isAdmin`/cache helpers.
- *
- * `canDelete` rule lives here (admin: any; non-admin/guest: only what they paid).
+ * `canDelete` rule lives here (admin: any; others: only what they paid).
  */
 export function useDashboardMutations({
   currentUser,

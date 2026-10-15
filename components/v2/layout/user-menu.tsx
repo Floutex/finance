@@ -14,7 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/v2/primitives/dropdown-menu"
 import { ParticipantAvatar } from "@/components/v2/finance/participant-avatar"
-import { SESSION_USER_KEY } from "@/lib/constants"
+import { clearSession } from "@/lib/session"
 
 type UserMenuProps = {
   user: string
@@ -25,9 +25,7 @@ export function UserMenu({ user, collapsed = false }: UserMenuProps) {
   const router = useRouter()
 
   const handleLogout = () => {
-    try {
-      sessionStorage.removeItem(SESSION_USER_KEY)
-    } catch {}
+    clearSession()
     router.replace("/login")
   }
 

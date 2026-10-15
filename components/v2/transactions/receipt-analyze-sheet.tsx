@@ -47,7 +47,7 @@ type ReceiptAnalyzeSheetProps = {
   currentUser: string
   /** Called when transactions have been saved successfully. */
   onSaved: (transactions: Transaction[]) => void
-  /** Override "Pago por" dropdown options (defaults to members). */
+  /** Override "Pago por" dropdown options (defaults to active participants). */
   payerOptions?: { id: string; name: string }[]
   /** Whether the user may choose who paid. */
   canEditPayer?: boolean
@@ -72,9 +72,9 @@ export function ReceiptAnalyzeSheet({
   canEditPayer = true,
   allowCreateCategory = true,
 }: ReceiptAnalyzeSheetProps) {
-  const { active: participants, members } = useParticipants()
+  const { active: participants } = useParticipants()
   const { categories } = useCategories()
-  const payers = payerOptions ?? members
+  const payers = payerOptions ?? participants
 
   const [file, setFile] = React.useState<File | null>(null)
   const [preview, setPreview] = React.useState<string | null>(null)

@@ -14,7 +14,6 @@ type ParticipantBadgeProps = {
 
 /**
  * Pill displaying a participant name colored by their hex.
- * Works for both static members (USERS) and dynamic guests (participants table).
  */
 export function ParticipantBadge({
   name,

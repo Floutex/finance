@@ -34,7 +34,7 @@ export default function AdminOverviewPage() {
       list.push({
         href: "/admin/participants",
         label: "Participantes e permissões",
-        description: "Membros, convidados, cores, tokens de acesso e permissões granulares.",
+        description: "Cores, links de acesso e permissões de cada pessoa.",
         icon: Users,
       })
     }

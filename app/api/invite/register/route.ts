@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
 
   const { data: participant, error: pError } = await supabase
     .from("participants")
-    .insert({ name, color, kind: "guest" })
+    .insert({ name, color, kind: "member" })
     .select("*")
     .single()
   if (pError || !participant) {

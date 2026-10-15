@@ -55,13 +55,12 @@ export default function TransactionsPage() {
   } = useTransactions()
   const {
     active: participants,
-    members,
     loading: pLoading,
   } = useParticipants()
   const { incomes, loading: incLoading } = useMonthlyIncomes()
   const { permissions } = useUserPermissions(user)
 
-  const memberNames = React.useMemo(() => members.map((m) => m.name), [members])
+  const memberNames = React.useMemo(() => participants.map((p) => p.name), [participants])
   const isAdmin = permissions.isAdmin
   const canEditPayer = permissions.can_change_payer
   const canManageCategories = permissions.can_manage_categories

@@ -1,7 +1,5 @@
-// ── Centralized user configuration ──
-// Members (login via PIN) live here. Guests come from the `participants` table
-// at runtime. For dynamic styling that mixes members + guests, use
-// `getParticipantStyle` (below) and the v2 finance primitives.
+// Quem entra por PIN. Os demais participantes entram pelo link pessoal
+// (`participant_tokens`) e existem só na tabela `participants`.
 
 export type UserConfig = {
   name: string

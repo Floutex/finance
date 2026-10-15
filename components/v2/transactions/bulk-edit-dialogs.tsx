@@ -48,7 +48,7 @@ export function BulkQuickEditDialog({
   const [value, setValue] = React.useState("")
   const { categories } = useCategories()
   const { events } = useEvents()
-  const { members } = useParticipants()
+  const { active: members } = useParticipants()
 
   React.useEffect(() => {
     if (!open) {
@@ -179,7 +179,7 @@ export function BulkAdvancedEditDialog({
   const [date, setDate] = React.useState("")
   const { categories } = useCategories()
   const { events } = useEvents()
-  const { members } = useParticipants()
+  const { active: members } = useParticipants()
 
   React.useEffect(() => {
     if (!open) {

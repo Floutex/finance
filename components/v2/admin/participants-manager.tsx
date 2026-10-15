@@ -43,7 +43,7 @@ import { useTransactions } from "@/hooks/use-transactions"
 import { useMonthlyIncomes } from "@/hooks/use-monthly-incomes"
 import { simplifyDebts } from "@/lib/debt-simplification"
 import { buildIncomeMap } from "@/lib/proportional-split"
-import { PENDING_MARKER } from "@/lib/constants"
+import { PENDING_MARKER, USERS } from "@/lib/constants"
 import {
   PERMISSION_METADATA,
   type ParticipantPermissions,
@@ -55,7 +55,7 @@ const BRL = new Intl.NumberFormat("pt-BR", {
   currency: "BRL",
 })
 
-type GuestToken = {
+type AccessToken = {
   token: string
   kind: string
   label: string | null
@@ -68,15 +68,16 @@ type ParticipantItem = {
   id: string
   name: string
   color: string
-  kind: "member" | "guest" | string
   is_admin: boolean
   permissions: ParticipantPermissions
   is_archived: boolean
   created_at: string
-  tokens: GuestToken[]
+  tokens: AccessToken[]
   transactionCount: number
   lastActivity: string | null
 }
+
+const usesPin = (name: string) => USERS.some((u) => u.name === name)
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/
 const COLOR_PALETTE = [
@@ -89,7 +90,6 @@ export function ParticipantsManager() {
   const [items, setItems] = React.useState<ParticipantItem[]>([])
   const [loading, setLoading] = React.useState(true)
   const [showArchived, setShowArchived] = React.useState(false)
-  const [kindFilter, setKindFilter] = React.useState<"all" | "member" | "guest">("all")
   const [searchQuery, setSearchQuery] = React.useState("")
   const [expandedId, setExpandedId] = React.useState<string | null>(null)
   const [editItem, setEditItem] = React.useState<ParticipantItem | null>(null)
@@ -127,7 +127,7 @@ export function ParticipantsManager() {
   const load = React.useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch("/api/admin/guests", { cache: "no-store" })
+      const res = await fetch("/api/admin/participants", { cache: "no-store" })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? "Falha ao carregar")
       setItems(json.items)
@@ -146,19 +146,18 @@ export function ParticipantsManager() {
   const visible = React.useMemo(() => {
     return items.filter((p) => {
       if (!showArchived && p.is_archived) return false
-      if (kindFilter !== "all" && p.kind !== kindFilter) return false
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim()
         return p.name.toLowerCase().includes(q)
       }
       return true
     })
-  }, [items, showArchived, kindFilter, searchQuery])
+  }, [items, showArchived, searchQuery])
 
   const toggleArchive = async (p: ParticipantItem) => {
     setPendingId(p.id)
     try {
-      const res = await fetch("/api/admin/guests", {
+      const res = await fetch("/api/admin/participants", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ participantId: p.id, is_archived: !p.is_archived }),
@@ -178,7 +177,7 @@ export function ParticipantsManager() {
   const generateToken = async (p: ParticipantItem) => {
     setPendingId(p.id)
     try {
-      const res = await fetch("/api/admin/guests", {
+      const res = await fetch("/api/admin/participants", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ participantId: p.id }),
@@ -196,7 +195,7 @@ export function ParticipantsManager() {
 
   const revokeToken = async (token: string) => {
     try {
-      const res = await fetch("/api/admin/guests", {
+      const res = await fetch("/api/admin/participants", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "revokeToken", token }),
@@ -204,7 +203,7 @@ export function ParticipantsManager() {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? "Falha")
       await load()
-      toast.success("Token revogado.")
+      toast.success("Link revogado.")
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Falha.")
     }
@@ -229,9 +228,6 @@ export function ParticipantsManager() {
           <h1 className="font-display text-3xl font-semibold tracking-tight">
             Participantes e permissões
           </h1>
-          <p className="text-sm text-muted-foreground">
-            Gerencie administradores, membros, convidados e permissões granulares de acesso.
-          </p>
         </div>
         <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
           <Checkbox
@@ -246,45 +242,9 @@ export function ParticipantsManager() {
 
       <div className="surface-1 overflow-hidden rounded-lg">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-3">
-          <div className="flex items-center gap-1 rounded-md bg-muted/40 p-1 text-xs">
-            <button
-              type="button"
-              onClick={() => setKindFilter("all")}
-              className={cn(
-                "rounded px-2.5 py-1 font-medium transition-colors",
-                kindFilter === "all"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              Todos ({items.filter((i) => showArchived || !i.is_archived).length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setKindFilter("member")}
-              className={cn(
-                "rounded px-2.5 py-1 font-medium transition-colors",
-                kindFilter === "member"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              Membros ({items.filter((i) => i.kind === "member" && (showArchived || !i.is_archived)).length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setKindFilter("guest")}
-              className={cn(
-                "rounded px-2.5 py-1 font-medium transition-colors",
-                kindFilter === "guest"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              Convidados ({items.filter((i) => i.kind === "guest" && (showArchived || !i.is_archived)).length})
-            </button>
-          </div>
-
+          <p className="px-1 text-xs font-medium text-muted-foreground">
+            {items.filter((i) => showArchived || !i.is_archived).length} participantes
+          </p>
           <div className="relative w-full max-w-xs sm:w-auto">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -350,21 +310,14 @@ export function ParticipantsManager() {
                             <ShieldCheck className="size-3" />
                             Admin
                           </Badge>
-                        ) : p.kind === "member" ? (
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] text-muted-foreground"
-                          >
-                            Membro
-                          </Badge>
-                        ) : (
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] text-muted-foreground"
-                          >
-                            Convidado
-                          </Badge>
-                        )}
+                        ) : null}
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] text-muted-foreground"
+                          title={usesPin(p.name) ? "Entra digitando o PIN" : "Entra pelo link pessoal"}
+                        >
+                          {usesPin(p.name) ? "PIN" : "Link"}
+                        </Badge>
 
                         {(() => {
                           const b = balanceByName.get(p.name) ?? 0
@@ -541,10 +494,11 @@ export function ParticipantsManager() {
                         )}
                       </div>
 
+                      {!usesPin(p.name) && (
                       <div>
                         <div className="mb-2 flex items-center justify-between">
                           <p className="text-xs font-medium text-muted-foreground">
-                            Magic-links pessoais
+                            Links pessoais
                           </p>
                           <Button
                             size="sm"
@@ -558,7 +512,7 @@ export function ParticipantsManager() {
                         </div>
                         {p.tokens.length === 0 ? (
                           <p className="py-2 text-center text-xs italic text-muted-foreground">
-                            Nenhum token gerado.
+                            Nenhum link ativo. Gere um para essa pessoa conseguir entrar.
                           </p>
                         ) : (
                           <ul className="flex flex-col gap-1.5">
@@ -620,6 +574,7 @@ export function ParticipantsManager() {
                           </ul>
                         )}
                       </div>
+                      )}
                     </div>
                   )}
                 </li>
@@ -683,7 +638,7 @@ function EditParticipantDialog({ item, onClose, onSaved }: EditDialogProps) {
     }
     setPending(true)
     try {
-      const res = await fetch("/api/admin/guests", {
+      const res = await fetch("/api/admin/participants", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

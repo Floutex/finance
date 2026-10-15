@@ -36,11 +36,6 @@ export type UseDashboardDataResult = {
   daysInPeriod: number
 }
 
-/**
- * Shared dashboard derivations: toolbar state + computed metrics + period span.
- * Used by both the member-facing `/dashboard` and the guest `/g/[token]` shells
- * so the two never drift.
- */
 export function useDashboardData({
   transactions,
   monthlyIncomes,

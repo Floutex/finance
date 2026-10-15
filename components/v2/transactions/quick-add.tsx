@@ -41,7 +41,7 @@ export function QuickAdd({
   onCreateMany,
   payerNames,
 }: QuickAddProps) {
-  const { active, members } = useParticipants()
+  const { active } = useParticipants()
   const [open, setOpen] = React.useState(false)
   const [query, setQuery] = React.useState("")
   const [pending, setPending] = React.useState(false)
@@ -82,7 +82,7 @@ export function QuickAdd({
         body: JSON.stringify({
           text,
           currentUser,
-          members: payerNames ?? members.map((m) => m.name),
+          members: payerNames ?? active.map((p) => p.name),
           participants: active.map((p) => p.name),
           defaultParticipants,
           today: new Date().toISOString().slice(0, 10),

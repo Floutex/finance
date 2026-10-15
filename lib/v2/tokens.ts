@@ -21,8 +21,6 @@ export const easing = {
 } as const
 
 // ── Participant color helpers ───────────────────────────────────────────────
-// Works with both static members (lib/constants.USERS) and dynamic participants
-// from the `participants` Supabase table. Input is always a hex color.
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
   const clean = hex.replace("#", "").trim()

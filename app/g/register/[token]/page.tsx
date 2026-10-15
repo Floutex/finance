@@ -3,6 +3,7 @@
 import * as React from "react"
 import { use } from "react"
 import { useRouter } from "next/navigation"
+import { writeSession } from "@/lib/session"
 import { ArrowRight, Check, Copy, Loader2 } from "lucide-react"
 
 import { cn } from "@/components/v2/primitives/utils"
@@ -16,7 +17,7 @@ const COLOR_PALETTE = [
   "#94A3B8", "#FDE047",
 ]
 
-export default function GuestRegisterPage({
+export default function InviteRegisterPage({
   params,
 }: {
   params: Promise<{ token: string }>
@@ -34,7 +35,7 @@ export default function GuestRegisterPage({
 
   const personalUrl =
     personalToken && typeof window !== "undefined"
-      ? `${window.location.origin}/v2/g/${personalToken}`
+      ? `${window.location.origin}/g/${personalToken}`
       : ""
 
   const submit = async (e: React.FormEvent) => {
@@ -49,8 +50,10 @@ export default function GuestRegisterPage({
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? "Falha")
+      const registeredName = json.participant?.name ?? name.trim()
+      writeSession({ name: registeredName, token: json.personalToken })
       setPersonalToken(json.personalToken)
-      setParticipantName(json.participant?.name ?? name.trim())
+      setParticipantName(registeredName)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Falha")
     } finally {
@@ -82,13 +85,13 @@ export default function GuestRegisterPage({
               Bem-vindo, {participantName}
             </h1>
             <p className="text-sm text-muted-foreground">
-              Salve este link — ele é seu acesso. Se perder, peça um novo convite
-              para o admin.
+              Este navegador já fica conectado. Guarde o link abaixo para entrar
+              em outro aparelho.
             </p>
           </div>
 
           <div className="space-y-2">
-            <Label>Seu magic-link</Label>
+            <Label>Seu link pessoal</Label>
             <div className="flex items-stretch gap-2">
               <Input value={personalUrl} readOnly className="font-mono text-xs" />
               <Button onClick={copy} aria-label="Copiar">
@@ -99,7 +102,7 @@ export default function GuestRegisterPage({
 
           <Button
             className="w-full"
-            onClick={() => router.push(`/g/${personalToken}`)}
+            onClick={() => router.replace("/dashboard")}
           >
             Entrar agora
             <ArrowRight />

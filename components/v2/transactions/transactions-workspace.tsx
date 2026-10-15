@@ -23,7 +23,7 @@ export type TransactionsWorkspaceProps = {
   onToolbarChange: (next: TransactionsToolbarValue) => void
   /** Disable quick-range chips when there's not enough data yet. */
   disabledQuickRange?: boolean
-  /** Optional row actions cell (admin shows edit/delete; guest hides). */
+  /** Optional row actions cell. */
   rowActions?: (transaction: Transaction) => React.ReactNode
   /** Enable a leading checkbox column on the desktop table. */
   enableSelection?: boolean
@@ -38,10 +38,6 @@ export type TransactionsWorkspaceProps = {
   mobilePageSize?: number
 }
 
-/**
- * Filtered transactions block — toolbar + responsive table/list. Shared between
- * the admin and guest shells; opt-in to selection/row-actions via props.
- */
 export function TransactionsWorkspace({
   transactions,
   participants,

@@ -41,7 +41,7 @@ export const PERMISSION_METADATA: {
   {
     key: "can_change_payer",
     label: "Mudar quem pagou",
-    description: "Permite registrar ou editar despesas em nome de outros participantes.",
+    description: "Permite registrar ou editar despesas pagas por outros participantes.",
   },
   {
     key: "can_manage_categories",
@@ -50,8 +50,8 @@ export const PERMISSION_METADATA: {
   },
   {
     key: "can_manage_invites",
-    label: "Convites e magic-links",
-    description: "Permite visualizar o link de convite global e gerar/revogar links de convidados.",
+    label: "Convites e links",
+    description: "Permite ver o link de convite geral e gerar ou revogar links pessoais.",
   },
   {
     key: "can_delete_others_tx",
