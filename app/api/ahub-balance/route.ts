@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseClient } from "@/lib/supabase"
 import { simplifyDebts } from "@/lib/debt-simplification"
+import { COUPLE_NAME } from "@/lib/proportional-split"
 
-const ANTONIO = "Antônio"
 const CORS = { "Access-Control-Allow-Origin": "*" }
 
 function lastDayOfMonth(yearMonth: string): string {
@@ -66,22 +66,23 @@ export async function GET(req: NextRequest) {
           amount: t.amount!,
           date: t.date,
           participants: t.participants!,
+          custom_shares: t.custom_shares as Record<string, number> | null,
         })),
       incomeMap
     )
 
-    const antonioDebts = allDebts.filter((d) => d.from === ANTONIO || d.to === ANTONIO)
+    const coupleDebts = allDebts.filter((d) => d.from === COUPLE_NAME || d.to === COUPLE_NAME)
 
     let netBalance = 0
-    for (const debt of antonioDebts) {
-      if (debt.to === ANTONIO) netBalance += debt.amount
-      else if (debt.from === ANTONIO) netBalance -= debt.amount
+    for (const debt of coupleDebts) {
+      if (debt.to === COUPLE_NAME) netBalance += debt.amount
+      else if (debt.from === COUPLE_NAME) netBalance -= debt.amount
     }
 
     return NextResponse.json(
       {
         net_balance: Number(netBalance.toFixed(2)),
-        debts: antonioDebts.map((d) => ({ from: d.from, to: d.to, amount: d.amount })),
+        debts: coupleDebts.map((d) => ({ from: d.from, to: d.to, amount: d.amount })),
         month: month ?? "all",
         updated_at: new Date().toISOString(),
       },

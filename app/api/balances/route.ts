@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseClient } from "@/lib/supabase"
 import { simplifyDebts } from "@/lib/debt-simplification"
+import { balanceHolder } from "@/lib/proportional-split"
 import { USERS } from "@/lib/constants"
 
 const CORS = { "Access-Control-Allow-Origin": "*" }
@@ -32,14 +33,15 @@ export async function GET(req: NextRequest) {
   const allDebts = simplifyDebts(
     (transactions ?? [])
       .filter((t) => t.paid_by && t.amount && t.participants)
-      .map((t) => ({ paid_by: t.paid_by, amount: t.amount!, date: t.date, participants: t.participants! })),
+      .map((t) => ({ paid_by: t.paid_by, amount: t.amount!, date: t.date, participants: t.participants!, custom_shares: t.custom_shares as Record<string, number> | null })),
     incomeMap
   )
 
+  const holder = balanceHolder(user.name)
   let netBalance = 0
   for (const debt of allDebts) {
-    if (debt.to === user.name) netBalance += debt.amount
-    else if (debt.from === user.name) netBalance -= debt.amount
+    if (debt.to === holder) netBalance += debt.amount
+    else if (debt.from === holder) netBalance -= debt.amount
   }
 
   return NextResponse.json(Number(netBalance.toFixed(2)), { headers: CORS })

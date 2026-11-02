@@ -4,6 +4,17 @@ type MonthlyIncome = Tables<"monthly_incomes">
 
 const PROPORTIONAL_PAIR = ["Antônio", "Júlia"]
 
+export const COUPLE_NAME = "Casal"
+
+/** O casal une as finanças: os dois são um único lado em qualquer saldo. */
+export function balanceHolder(person: string): string {
+  return PROPORTIONAL_PAIR.includes(person) ? COUPLE_NAME : person
+}
+
+export function holderMembers(person: string): string[] {
+  return balanceHolder(person) === COUPLE_NAME ? PROPORTIONAL_PAIR : [person]
+}
+
 /**
  * Resolve the income for a person in a given month.
  * First checks for an exact match, then falls back to the most recent is_fixed=true entry.

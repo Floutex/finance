@@ -1,4 +1,4 @@
-import { calculateShares } from "./proportional-split"
+import { balanceHolder, calculateShares } from "./proportional-split"
 
 export interface Transaction {
     paid_by: string
@@ -43,9 +43,11 @@ export function simplifyDebts(
 
         // Each participant (except payer) owes their share to the payer
         t.participants.forEach(participant => {
-            if (participant !== t.paid_by) {
+            const debtor = balanceHolder(participant)
+            const creditor = balanceHolder(t.paid_by)
+            if (debtor !== creditor) {
                 const shareAmount = shares.get(participant) ?? (t.amount / t.participants.length)
-                addDebt(participant, t.paid_by, shareAmount)
+                addDebt(debtor, creditor, shareAmount)
             }
         })
 

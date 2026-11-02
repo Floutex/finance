@@ -8,7 +8,7 @@ import { parseISO } from "date-fns"
 import type { Tables } from "@/lib/database.types"
 import { PENDING_MARKER, normalizeText, isAdminUser } from "@/lib/constants"
 import { simplifyDebts, type Debt } from "@/lib/debt-simplification"
-import { buildIncomeMap, calculateShares } from "@/lib/proportional-split"
+import { balanceHolder, buildIncomeMap, calculateShares, holderMembers } from "@/lib/proportional-split"
 
 export type Transaction = Tables<"shared_transactions">
 export type MonthlyIncome = Tables<"monthly_incomes">
@@ -195,14 +195,18 @@ export function computeDashboardMetrics(args: {
     })
 
   // ── Chart series (running balance for current user) + per-day breakdown ──
+  const myMembers = holderMembers(currentUser)
   let running = 0
   const dateBalance = new Map<string, number>()
   const dailyBreakdown: Record<string, DailyDelta[]> = {}
   for (const t of normalized) {
     if (t.participants.length === 0) continue
-    const myShare = t.shares.get(currentUser) ?? t.amount / t.participants.length
-    const isParticipant = t.participants.includes(currentUser)
-    const isPayer = t.paid_by === currentUser
+    const fallbackShare = t.amount / t.participants.length
+    const myShare = myMembers
+      .filter((m) => t.participants.includes(m))
+      .reduce((sum, m) => sum + (t.shares.get(m) ?? fallbackShare), 0)
+    const isParticipant = myMembers.some((m) => t.participants.includes(m))
+    const isPayer = myMembers.includes(t.paid_by)
     let delta = 0
     if (isPayer && isParticipant) delta = t.amount - myShare
     else if (isPayer && !isParticipant) delta = t.amount
@@ -236,12 +240,13 @@ export function computeDashboardMetrics(args: {
       custom_shares: (t.custom_shares as Record<string, number> | null) ?? null,
     }))
   const simplifiedDebts = simplifyDebts(simplifyInputs, incomeMap)
+  const myHolder = balanceHolder(currentUser)
   const myDebts = simplifiedDebts.filter(
-    (d) => d.from === currentUser || d.to === currentUser
+    (d) => d.from === myHolder || d.to === myHolder
   )
   const totalBalance = myDebts.reduce((acc, d) => {
-    if (d.from === currentUser) return acc - d.amount
-    if (d.to === currentUser) return acc + d.amount
+    if (d.from === myHolder) return acc - d.amount
+    if (d.to === myHolder) return acc + d.amount
     return acc
   }, 0)
 

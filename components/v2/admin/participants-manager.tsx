@@ -42,7 +42,7 @@ import { reloadParticipants } from "@/lib/participants-cache"
 import { useTransactions } from "@/hooks/use-transactions"
 import { useMonthlyIncomes } from "@/hooks/use-monthly-incomes"
 import { simplifyDebts } from "@/lib/debt-simplification"
-import { buildIncomeMap } from "@/lib/proportional-split"
+import { balanceHolder, buildIncomeMap } from "@/lib/proportional-split"
 import { PENDING_MARKER, USERS } from "@/lib/constants"
 import {
   PERMISSION_METADATA,
@@ -320,7 +320,7 @@ export function ParticipantsManager() {
                         </Badge>
 
                         {(() => {
-                          const b = balanceByName.get(p.name) ?? 0
+                          const b = balanceByName.get(balanceHolder(p.name)) ?? 0
                           if (Math.abs(b) < 0.005) return null
                           return (
                             <span
@@ -408,7 +408,7 @@ export function ParticipantsManager() {
                       <div className="grid grid-cols-2 gap-3 rounded-md border border-border bg-background/40 p-3 text-xs sm:grid-cols-4">
                         <div>
                           {(() => {
-                            const b = balanceByName.get(p.name) ?? 0
+                            const b = balanceByName.get(balanceHolder(p.name)) ?? 0
                             const zero = Math.abs(b) < 0.005
                             return (
                               <>

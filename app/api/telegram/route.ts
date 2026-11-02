@@ -142,7 +142,7 @@ export async function POST(req: NextRequest) {
     const debts = simplifyDebts(
       (transactions ?? [])
         .filter((t) => t.paid_by && t.amount && t.participants)
-        .map((t) => ({ paid_by: t.paid_by, amount: t.amount!, date: t.date, participants: t.participants! })),
+        .map((t) => ({ paid_by: t.paid_by, amount: t.amount!, date: t.date, participants: t.participants!, custom_shares: t.custom_shares as Record<string, number> | null })),
       incomeMap
     )
 
